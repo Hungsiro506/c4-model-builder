@@ -47,7 +47,7 @@ import {
 import { highlightActive } from '@/lib/highlight'
 import { canConnectElements } from '@/lib/connectionValidation'
 import { expandComposite } from '@/lib/expandComposite'
-import { axisForDirection, gapShiftMany } from '@/lib/expandLayout'
+import { axisForDirection, gapShiftMany, gapShiftCross } from '@/lib/expandLayout'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -145,9 +145,9 @@ function isOverlayNode(node: Pick<Node, 'id' | 'type'>): boolean {
 function isExpandedChildNode(
   node: Node,
   view: View | null | undefined,
-  expandedIds: string[],
+  expandedIds: Set<string>,
 ): boolean {
-  if (expandedIds.length === 0 || isOverlayNode(node)) return false
+  if (expandedIds.size === 0 || isOverlayNode(node)) return false
   if (!node.data || !('element' in node.data)) return false
   return !(view?.elements.some((e) => e.id === node.id) ?? false)
 }
@@ -425,7 +425,9 @@ export default function Canvas() {
       // Sizing pass: how much each top-level expanded box grows vs 200×100.
       const { growth } = expandComposite(laidOut, expandCtx)
       const axis = axisForDirection(direction)
-      const shifts = growth.map((g) => ({
+      const cross: typeof axis = axis === 'x' ? 'y' : 'x'
+      // Primary (flow) axis: open a gap so following ranks slide down/across.
+      const primaryShifts = growth.map((g) => ({
         expandedId: g.expandedId,
         delta: axis === 'x' ? Math.max(0, g.width - 200) : Math.max(0, g.height - 100),
       }))
@@ -435,9 +437,15 @@ export default function Canvas() {
         width: n.measured?.width ?? (Number(n.style?.width) || 200),
         height: n.measured?.height ?? (Number(n.style?.height) || 100),
       }))
-      const shiftedById = new Map(
-        gapShiftMany(layoutNodesForShift, shifts, axis).map((n) => [n.id, n.position]),
-      )
+      let shifted = gapShiftMany(layoutNodesForShift, primaryShifts, axis)
+      // Cross axis: a box that grows on the perpendicular axis overlaps same-rank
+      // siblings the flow-axis shift left untouched. Push only the ones it reaches.
+      for (const g of growth) {
+        const crossDelta = cross === 'x' ? Math.max(0, g.width - 200) : Math.max(0, g.height - 100)
+        const grownPrimary = axis === 'x' ? g.width : g.height
+        shifted = gapShiftCross(shifted, g.expandedId, crossDelta, axis, grownPrimary)
+      }
+      const shiftedById = new Map(shifted.map((n) => [n.id, n.position]))
       const shiftedLaidOut = laidOut.map((n) => ({ ...n, position: shiftedById.get(n.id) ?? n.position }))
       expandedNodes = expandComposite(shiftedLaidOut, expandCtx).nodes
 

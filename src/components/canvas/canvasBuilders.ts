@@ -765,16 +765,18 @@ export function buildExpandBoundaryNodes(
       type: 'boundary',
       position: { x, y },
       measured: { width: w, height: h },
-      style: { width: w, height: h, pointerEvents: 'none' },
+      // Wrapper itself is pointer-opaque so grabbing any empty spot on the box
+      // starts a drag (no dragHandle → whole node drags). Child element nodes are
+      // separate, higher-z React Flow nodes stacked on top, so they stay
+      // interactive; `.nodrag` buttons in the header stay clickable.
+      style: { width: w, height: h, pointerEvents: 'auto' },
       data: { name: info.name, typeLabel, collapsible: true, elementId: expandedId },
       // Deeper boxes sit above their parent box but still behind content (>= 0).
       zIndex: -5 + depthOf(expandedId),
       selectable: false,
-      // Draggable via the header handle only (body is pointer-transparent so
-      // child content nodes stay interactive). Dragging translates the whole
-      // expanded subtree — Canvas.onNodeDragStart wires the members.
+      // Draggable as a unit — Canvas.onNodeDragStart wires the members so the
+      // whole expanded subtree translates together.
       draggable: true,
-      dragHandle: '.c4-overlay-drag-handle',
       focusable: false,
     })
   }

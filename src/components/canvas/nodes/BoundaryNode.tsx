@@ -19,6 +19,11 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const addContainer = useWorkspaceStore((s) => s.addContainer)
   const addComponent = useWorkspaceStore((s) => s.addComponent)
   const isSystem = data.typeLabel === 'Software System'
+  // Populated expand-in-place boundaries are draggable as a unit: the whole box
+  // body grabs (children are separate nodes stacked on top, so they stay
+  // interactive). Empty boundaries + scope/group boundaries stay pointer-
+  // transparent so clicks/pans pass through to the canvas underneath.
+  const bodyDraggable = !!data.collapsible && !data.empty
   const emptyTitle = isSystem
     ? 'Add containers to this system'
     : 'Add components to this container'
@@ -102,8 +107,8 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--canvas-boundary-border, var(--glass-overlay-sm))',
           background: 'var(--canvas-boundary-bg, var(--glass-overlay-xxs))',
-          cursor: 'default',
-          pointerEvents: 'none',
+          cursor: bodyDraggable ? 'grab' : 'default',
+          pointerEvents: bodyDraggable ? 'auto' : 'none',
           touchAction: 'none',
           userSelect: 'none',
         }}

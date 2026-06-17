@@ -102,4 +102,44 @@ test.describe('Expand-in-place — move while expanded', () => {
     expect(Math.abs(webRestored!.x - webAfter!.x)).toBeLessThanOrEqual(3)
     expect(Math.abs(webRestored!.y - webAfter!.y)).toBeLessThanOrEqual(3)
   })
+
+  test('dragging the boundary body (not just the header) moves the box, does not pan', async ({ workspace }) => {
+    const page = workspace.page
+    await expandNode(page, 'edca')
+
+    const webBefore = await nodeBox(page, 'web')
+    const box = await page.locator('.react-flow__node[data-id="__expand_boundary__edca"]').first().boundingBox()
+    expect(box).not.toBeNull()
+    expect(webBefore).not.toBeNull()
+
+    const hermesBefore = await nodeBox(page, 'hermes')
+    expect(hermesBefore).not.toBeNull()
+
+    // Grab an empty region of the box body — the left padding column, vertically
+    // centred so it sits beside the children (which fill the box interior) rather
+    // than on top of them. The body is pointer-opaque, so this moves the box
+    // rather than panning the canvas.
+    const grabX = box!.x + 8
+    const grabY = box!.y + box!.height / 2
+    await page.mouse.move(grabX, grabY)
+    await page.mouse.down()
+    await page.mouse.move(grabX + 100, grabY + 40, { steps: 12 })
+    await page.mouse.up()
+    await page.waitForTimeout(300)
+
+    const webAfter = await nodeBox(page, 'web')
+    const hermesAfter = await nodeBox(page, 'hermes')
+    // Both children moved together → the whole box dragged as a unit (not a single
+    // child drag, and not a viewport pan — persistence check below rules out pan).
+    expect(webAfter!.x - webBefore!.x).toBeGreaterThan(40)
+    expect(hermesAfter!.x - hermesBefore!.x).toBeGreaterThan(40)
+    expect(Math.abs((webAfter!.x - webBefore!.x) - (hermesAfter!.x - hermesBefore!.x))).toBeLessThanOrEqual(4)
+
+    // Confirm it was a node move, not a pan: collapse/re-expand and the child
+    // returns to the dragged spot (a pan would not persist).
+    await collapseNode(page, 'edca')
+    await expandNode(page, 'edca')
+    const webRestored = await nodeBox(page, 'web')
+    expect(Math.abs(webRestored!.x - webAfter!.x)).toBeLessThanOrEqual(3)
+  })
 })
