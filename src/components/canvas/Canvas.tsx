@@ -45,6 +45,7 @@ import {
   EXPAND_BOUNDARY_PREFIX,
 } from './canvasBuilders'
 import { highlightActive } from '@/lib/highlight'
+import { canConnectElements } from '@/lib/connectionValidation'
 import { expandComposite } from '@/lib/expandComposite'
 import { axisForDirection, gapShiftMany } from '@/lib/expandLayout'
 import CanvasGuide from './CanvasGuide'
@@ -1047,9 +1048,20 @@ export default function Canvas() {
   // multiple handles — dedup only on the exact same direction (source→target).
   // We intentionally allow B→A right after A→B so bidirectional relationships work.
   const recentConnect = useRef<Set<string>>(new Set())
+
+  // Block cross-level connections (e.g. a container shown via expand-in-place
+  // dragged to a top-level system). React Flow calls this while dragging so the
+  // invalid target never highlights; we re-check in onConnect as a backstop.
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) =>
+      canConnectElements(workspaceRef.current, connection.source, connection.target),
+    [],
+  )
+
   const onConnect = useCallback(
     (connection: Connection) => {
       if (connection.source && connection.target && connection.source !== connection.target) {
+        if (!canConnectElements(workspaceRef.current, connection.source, connection.target)) return
         const key = `${connection.source}->${connection.target}`
         if (recentConnect.current.has(key)) return
         recentConnect.current.add(key)
@@ -1063,6 +1075,7 @@ export default function Canvas() {
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       if (newConnection.source && newConnection.target) {
+        if (!canConnectElements(workspaceRef.current, newConnection.source, newConnection.target)) return
         reconnectRelationship(oldEdge.id, newConnection.source, newConnection.target)
         setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
       }
@@ -1134,6 +1147,7 @@ export default function Canvas() {
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
+        isValidConnection={isValidConnection}
         onReconnect={onReconnect}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
