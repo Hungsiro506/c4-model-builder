@@ -859,22 +859,51 @@ export function buildCompositeEdges(
     if (!n.hidden && (n.data as { element?: ModelElement })?.element) visibleIds.add(n.id)
   }
 
-  // Walk up from the endpoint; the deepest expanded-or-visible ancestor wins.
-  const resolveEndpoint = (id: string): string | null => {
+  // Hierarchy depth of a model element (system/person = 0, container = 1, …).
+  const depthOf = (id: string): number => {
+    let d = 0
+    let cur = parentOf.get(id)
+    while (cur !== undefined) { d++; cur = parentOf.get(cur) }
+    return d
+  }
+
+  // Walk up from `id`, ignoring ancestors deeper than `maxDepth`, and return the
+  // deepest expanded (→ wrapper box) or visible node at/under that depth.
+  const resolveAtMaxDepth = (id: string, maxDepth: number): string | null => {
     let cur: string | undefined = id
     while (cur !== undefined) {
-      if (expandedIds.has(cur)) return `${EXPAND_BOUNDARY_PREFIX}${cur}`
-      if (visibleIds.has(cur)) return cur
+      if (depthOf(cur) <= maxDepth) {
+        if (expandedIds.has(cur)) return `${EXPAND_BOUNDARY_PREFIX}${cur}`
+        if (visibleIds.has(cur)) return cur
+      }
       cur = parentOf.get(cur)
     }
     return null
   }
 
+  // Natural resolution: the deepest expanded-or-visible ancestor of the endpoint.
+  const resolveEndpoint = (id: string): string | null => resolveAtMaxDepth(id, Infinity)
+
+  // Depth of a resolved node id (strip the wrapper prefix to recover the element).
+  const resolvedDepth = (resolved: string): number =>
+    depthOf(resolved.startsWith(EXPAND_BOUNDARY_PREFIX)
+      ? resolved.slice(EXPAND_BOUNDARY_PREFIX.length)
+      : resolved)
+
   const byPair = new Map<string, EdgeInfo>()
   const edgeInfos: EdgeInfo[] = []
   for (const rel of workspace.model.relationships) {
-    const s = resolveEndpoint(rel.sourceId)
-    const t = resolveEndpoint(rel.destinationId)
+    // Resolve each endpoint naturally, then equalize: a relationship is always
+    // drawn between equal C4 levels. If one side folds up to a shallower box
+    // (collapsed ancestor) while the other stays deep (expanded, child visible),
+    // fold the deeper side up to the shallower's level too — so A1→B1 shows as
+    // A→B (wrapper) when A is collapsed, never as a cross-level A→B1.
+    const s0 = resolveEndpoint(rel.sourceId)
+    const t0 = resolveEndpoint(rel.destinationId)
+    if (!s0 || !t0) continue
+    const target = Math.min(resolvedDepth(s0), resolvedDepth(t0))
+    const s = resolveAtMaxDepth(rel.sourceId, target)
+    const t = resolveAtMaxDepth(rel.destinationId, target)
     if (!s || !t || s === t) continue
     const key = `${s}->${t}`
     const existing = byPair.get(key)

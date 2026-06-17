@@ -82,3 +82,66 @@ describe('buildCompositeEdges — expanded endpoint re-target', () => {
     expect(pairs).not.toContain('dev->sysB')
   })
 })
+
+/** Workspace: systems A (container a1) and B (container b1), with an
+ *  equal-level container relationship a1→b1. */
+function wsContainerRel(): Workspace {
+  return {
+    name: 'equal-level',
+    model: {
+      people: [],
+      softwareSystems: [
+        {
+          id: 'sysA', type: 'softwareSystem', name: 'A', tags: [], properties: {},
+          containers: [{ id: 'a1', type: 'container', name: 'A1', tags: [], properties: {}, components: [] }],
+        },
+        {
+          id: 'sysB', type: 'softwareSystem', name: 'B', tags: [], properties: {},
+          containers: [{ id: 'b1', type: 'container', name: 'B1', tags: [], properties: {}, components: [] }],
+        },
+      ],
+      relationships: [
+        { id: 'r1', sourceId: 'a1', destinationId: 'b1', tags: [], properties: {} },
+      ],
+      groups: [],
+    },
+    views: {
+      systemLandscapeViews: [], systemContextViews: [], containerViews: [], componentViews: [],
+      configuration: { styles: { elements: [], relationships: [] } },
+    },
+  } as unknown as Workspace
+}
+
+describe('buildCompositeEdges — level-equalized resolution', () => {
+  it('a1→b1 shows as A→B-boundary when A is collapsed but B is expanded', () => {
+    // A collapsed: a1 absent, sysA is a visible content node.
+    // B expanded: b1 visible content node + B wrapper boundary.
+    const nodes = [
+      contentNode('sysA', 'softwareSystem', 'A', 0, 0),
+      contentNode('b1', 'container', 'B1', 600, 0),
+      boundaryNode('sysB', 580, -20),
+    ]
+
+    const edges = buildCompositeEdges(wsContainerRel(), nodes, NO_FILTERS)
+    const pairs = edges.map((e) => `${e.source}->${e.target}`)
+
+    // The equal-level container edge folds the deeper (B) side up to match the
+    // collapsed (A) side: A → B-wrapper, NOT a cross-level A → b1.
+    expect(pairs).toEqual([`sysA->${EXPAND_BOUNDARY_PREFIX}sysB`])
+    expect(pairs).not.toContain('sysA->b1')
+  })
+
+  it('a1→b1 stays finest (a1→b1) when BOTH A and B are expanded', () => {
+    const nodes = [
+      contentNode('a1', 'container', 'A1', 0, 0),
+      contentNode('b1', 'container', 'B1', 600, 0),
+      boundaryNode('sysA', -20, -20),
+      boundaryNode('sysB', 580, -20),
+    ]
+
+    const edges = buildCompositeEdges(wsContainerRel(), nodes, NO_FILTERS)
+    const pairs = edges.map((e) => `${e.source}->${e.target}`)
+
+    expect(pairs).toEqual(['a1->b1'])
+  })
+})
