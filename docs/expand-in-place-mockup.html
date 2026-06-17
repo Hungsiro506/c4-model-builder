@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>c4hero — expand-in-place prototype (4 levels)</title>
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --grid: #1b2233;
+    --text: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  body {
+    background: var(--bg);
+    background-image: radial-gradient(var(--grid) 1.2px, transparent 1.2px);
+    background-size: 26px 26px;
+    color: var(--text);
+    overflow: auto;
+  }
+  #hud {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 50; display: flex; gap: 10px; align-items: center;
+    background: rgba(17,24,39,.9); border: 1px solid #2b3550; backdrop-filter: blur(8px);
+    padding: 8px 14px; border-radius: 999px; font-size: 13px;
+  }
+  #hud b { color: #93c5fd; }
+  #hud button {
+    background: #1f2937; color: #e5e7eb; border: 1px solid #374151;
+    border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+  }
+  #hud button:hover { background: #374151; }
+  #legend {
+    position: fixed; bottom: 14px; left: 14px; z-index: 50; font-size: 11px;
+    background: rgba(17,24,39,.8); padding: 8px 12px; border-radius: 8px;
+    border: 1px solid #2b3550; line-height: 1.7;
+  }
+  #legend .sw { display:inline-block; width:22px; height:0; border-top:2px solid; vertical-align:middle; margin-right:6px; }
+  #hint { position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
+    z-index: 50; font-size: 12px; color: #9ca3af; background: rgba(17,24,39,.7);
+    padding: 6px 12px; border-radius: 8px; border: 1px solid #2b3550; }
+  #stage { position: relative; width: 3000px; height: 1800px; }
+  svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+  .node { position: absolute; z-index: 2; border-radius: 12px;
+    transition: left .4s cubic-bezier(.2,.8,.2,1), top .4s cubic-bezier(.2,.8,.2,1),
+                width .4s cubic-bezier(.2,.8,.2,1), height .4s cubic-bezier(.2,.8,.2,1), opacity .25s;
+    display: flex; flex-direction: column; }
+
+  .node.person { background:#6b7280; border:1px solid #9ca3af; align-items:center;
+    justify-content:center; text-align:center; padding:8px; }
+  .node.person .role { font-size:9px; opacity:.8; }
+  .node.person .nm { font-weight:700; font-size:13px; }
+
+  /* collapsed boxes — color deepens per level */
+  .node.box { border:2px solid #1f2937; padding:10px 12px; box-shadow:0 5px 14px rgba(0,0,0,.4); cursor:zoom-in; position:absolute; }
+  .node.box:hover { outline:2px solid #60a5fa; }
+  .node.box .nm { font-weight:800; font-size:13px; }
+  .node.box .ty { font-size:9px; opacity:.85; margin-top:2px; }
+  .node.box .desc { font-size:10px; opacity:.8; margin-top:6px; }
+  .node.box.system    { background:#6b7280; }
+  .node.box.container { background:#5b667d; }
+  .node.box.component { background:#566184; }
+  .node.box.code      { background:#4a5578; }
+  .node.box.isnew     { background:#2563eb; border-color:#1d4ed8; }
+  .node.box .badge {
+    position:absolute; top:-9px; right:-9px; background:#2563eb; color:#fff;
+    border-radius:999px; width:20px; height:20px; font-size:10px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; border:2px solid #0b0f1a; }
+  .node.box .codetag {
+    position:absolute; top:-8px; left:-8px; background:#7c3aed; color:#fff;
+    font-size:8px; font-weight:700; padding:1px 5px; border-radius:6px; border:1px solid #0b0f1a; }
+
+  /* expanded boundaries — dashed, lighten per level */
+  .node.boundary { padding:0; cursor:zoom-out; }
+  .node.boundary.system    { background:rgba(91,107,140,.10); border:1.5px dashed #5b6b8c; }
+  .node.boundary.container { background:rgba(99,110,160,.12); border:1.5px dashed #6b76b0; }
+  .node.boundary.component { background:rgba(124,110,200,.12); border:1.5px dashed #8b7ad0; }
+  .node.boundary > .bhead { padding:7px 11px; display:flex; flex-direction:column; gap:1px; pointer-events:none; }
+  .node.boundary .nm { font-weight:800; font-size:12px; color:#cbd5e1; }
+  .node.boundary .ty { font-size:8px; letter-spacing:.08em; text-transform:uppercase; color:#7e8aa3; }
+  .node.boundary .collapse { position:absolute; top:7px; right:9px; background:#1f2937; color:#e5e7eb;
+    border:1px solid #374151; border-radius:6px; font-size:10px; padding:2px 6px; cursor:pointer; }
+  .node.boundary.codeext .ty::after { content:" · c4hero code map"; color:#a78bfa; }
+
+  .edge-label { position:absolute; z-index:3; font-size:10px; color:#cbd5e1;
+    background:rgba(11,15,26,.8); padding:1px 5px; border-radius:4px;
+    transform:translate(-50%,-50%); pointer-events:none; white-space:nowrap; }
+</style>
+</head>
+<body>
+  <div id="hud">
+    <span>c4hero · <b>expand-in-place</b> · 4 levels</span>
+    <button id="reset">Reset to context</button>
+    <button id="all">Expand DataStore path</button>
+  </div>
+  <div id="hint">Click any <b>box</b> to explode it in place. system ▸ container ▸ component ▸ <b style="color:#a78bfa">code</b>. Siblings stay put.</div>
+  <div id="legend">
+    <div><span class="sw" style="border-color:#9ca3af"></span>existing</div>
+    <div><span class="sw" style="border-color:#3b82f6"></span>new</div>
+    <div><span class="sw" style="border-color:#22c55e"></span>updated</div>
+    <div style="margin-top:4px;color:#a78bfa">▣ purple tag = code (sidecar / c4hero-only)</div>
+  </div>
+  <div id="stage"><svg class="edges" id="edges"></svg></div>
+
+<script>
+// ---- model: recursive tree -------------------------------------------
+// type per depth: system > container > component > code.
+// code nodes = "sidecar" layer (not portable Structurizr) — flagged codeext.
+const model = {
+  // leaf actors
+  persons: {
+    dse:    { name:"DSE",         x:60, y:150 },
+    agency: { name:"BA's Agency", x:60, y:420 },
+  },
+  // root systems with nested children
+  systems: {
+    edca: { name:"EDCA", type:"system", x:380, y:140, children:[
+      { id:"web", name:"Web Application", type:"container", tech:"ReactJS", desc:"SWSS portal", children:[
+        { id:"router", name:"Router", type:"component", tech:"React Router", children:[
+          { id:"app_tsx",   name:"App.tsx",    type:"code", code:true },
+          { id:"routes_tsx",name:"Routes.tsx", type:"code", code:true },
+        ]},
+        { id:"apiClient", name:"API Client", type:"component", tech:"fetch" },
+      ]},
+      { id:"hermes", name:"Hermes", type:"container", tech:"TypeScript", desc:"RMS Gateway" },
+    ]},
+    rms: { name:"RMS", type:"system", x:760, y:140, children:[
+      { id:"configsvc", name:"ConfigSvc", type:"container", tech:"Go", desc:"Agency config" },
+    ]},
+    ds: { name:"DataStore", type:"system", x:1180, y:380, children:[
+      { id:"adat", name:"ADAT", type:"container", tech:"Go", desc:"Deploy tool", children:[
+        { id:"deployer", name:"Deployer", type:"component", tech:"Go", children:[
+          { id:"deploy_go", name:"deploy.go", type:"code", code:true },
+          { id:"dns_go",    name:"dns.go",    type:"code", code:true },
+        ]},
+        { id:"planner", name:"Planner", type:"component", tech:"Go" },
+      ]},
+      { id:"keyv",  name:"KeyVault",     type:"container", tech:"—",        desc:"Conn strings" },
+      { id:"dsdb",  name:"DataStore DB", type:"container", tech:"AzureSQL", desc:"Analytics", isnew:true },
+      { id:"event", name:"Event-Conductor", type:"container", tech:"Go",   desc:"ETL pipeline" },
+    ]},
+    infra: { name:"Infra Provisioning", type:"system", x:760, y:470, children:[
+      { id:"alsinfra", name:"als-infra", type:"container", tech:"Terraform", desc:"Provisioning" },
+    ]},
+  },
+  // edges declared at the granularity they exist; renderer re-targets to
+  // the nearest VISIBLE ancestor of each endpoint.
+  edges: [
+    { from:"dse",    to:"edca",      label:"Approve/Reject", kind:"updated" },
+    { from:"agency", to:"edca",      label:"Create request", kind:"updated" },
+    { from:"edca",   to:"rms",       label:"Requests deploy",kind:"new" },
+    { from:"rms",    to:"ds",        label:"Forwards deploy",kind:"new" },
+    { from:"ds",     to:"rms",       label:"Get config",     kind:"existing" },
+    { from:"infra",  to:"ds",        label:"Provision SQL",  kind:"updated" },
+    // container level
+    { from:"web",    to:"hermes",    label:"forward",        kind:"new" },
+    { from:"hermes", to:"adat",      label:"Forwards deploy",kind:"new" },
+    { from:"adat",   to:"keyv",      label:"Get reserved",   kind:"new" },
+    { from:"adat",   to:"dsdb",      label:"Create SQL",     kind:"existing" },
+    { from:"adat",   to:"configsvc", label:"Insert config",  kind:"new" },
+    { from:"alsinfra",to:"keyv",     label:"Provision KV",   kind:"new" },
+    { from:"alsinfra",to:"dsdb",     label:"Provision SQL",  kind:"updated" },
+    { from:"event",  to:"configsvc", label:"Get config",     kind:"existing" },
+    // component level
+    { from:"apiClient", to:"hermes", label:"calls",          kind:"new" },
+    { from:"deployer",  to:"keyv",   label:"reads",          kind:"new" },
+    { from:"planner",   to:"deployer",label:"plans",         kind:"existing" },
+    // code level
+    { from:"deploy_go", to:"dns_go", label:"calls",          kind:"existing" },
+    { from:"app_tsx",   to:"routes_tsx", label:"mounts",     kind:"existing" },
+    { from:"routes_tsx",to:"apiClient",  label:"renders",    kind:"new" },
+  ],
+};
+
+const edgeColor = { existing:"#9ca3af", new:"#3b82f6", updated:"#22c55e" };
+const TYPE_LABEL = { system:"software system", container:"container", component:"component", code:"code" };
+// collapsed fixed sizes by type
+const SIZE = {
+  person:    {w:140,h:80},
+  system:    {w:200,h:100},
+  container: {w:150,h:80},
+  component: {w:138,h:68},
+  code:      {w:120,h:52},
+};
+
+// ---- build parent map + node index (walk tree) ------------------------
+const nodeById = {};
+const parent = {};
+for (const [id,p] of Object.entries(model.persons)) nodeById[id] = {...p, id, type:"person"};
+(function walk(list, par){
+  for (const n of list){
+    nodeById[n.id] = n;
+    parent[n.id] = par;
+    if (n.children) walk(n.children, n.id);
+  }
+})(Object.entries(model.systems).map(([id,s])=>({...s,id})), null);
+// systems themselves
+for (const [id,s] of Object.entries(model.systems)) { nodeById[id] = {...s,id}; parent[id] = null; }
+
+const expanded = new Set();
+
+// nearest VISIBLE ancestor: descend chain root..id while ancestors expanded
+function visibleId(id){
+  const chain=[]; let cur=id; while(cur!=null){ chain.unshift(cur); cur=parent[cur]; }
+  let rep = chain[0];                 // root always visible
+  for (let i=0;i<chain.length-1;i++){
+    if (expanded.has(chain[i])) rep = chain[i+1]; else break;
+  }
+  return rep;
+}
+
+// ---- recursive measure (bottom-up sizing) -----------------------------
+const HEADER = 44, PAD = 16, GAP = 16;
+function measure(node){
+  const t = node.type;
+  if (!node.children || !expanded.has(node.id)){
+    const s = SIZE[t] || SIZE.component;
+    return { id:node.id, w:s.w, h:s.h, type:t, node, expanded:false, kids:[] };
+  }
+  const kids = node.children.map(measure);
+  const cols = Math.min(2, kids.length);
+  // column widths / row heights for a simple grid
+  let x=PAD, y=HEADER, rowH=0, col=0, maxRight=0;
+  for (const k of kids){
+    k.dx = x; k.dy = y;
+    x += k.w + GAP; rowH = Math.max(rowH, k.h); col++;
+    maxRight = Math.max(maxRight, k.dx + k.w);
+    if (col>=cols){ col=0; x=PAD; y += rowH + GAP; rowH=0; }
+  }
+  // total height: find max dy+h
+  const bottom = Math.max(...kids.map(k=>k.dy+k.h));
+  return { id:node.id, w:maxRight+PAD, h:bottom+PAD, type:t, node, expanded:true, kids };
+}
+
+// ---- place (top-down absolute coords) ---------------------------------
+function place(m, x, y, out){
+  out[m.id] = { x, y, w:m.w, h:m.h, type:m.type, node:m.node, expanded:m.expanded };
+  for (const k of m.kids) place(k, x + k.dx, y + k.dy, out);
+}
+
+function computeLayout(){
+  const pos = {};
+  // persons (leaves)
+  for (const [id,p] of Object.entries(model.persons))
+    pos[id] = { x:p.x, y:p.y, w:SIZE.person.w, h:SIZE.person.h, type:"person", node:nodeById[id] };
+
+  // measure each system, place at its model coord
+  const measured = {};
+  for (const [id,s] of Object.entries(model.systems))
+    measured[id] = measure({...s, id});
+
+  // shove overlapping systems to the right when a boundary grew
+  const order = Object.keys(measured).sort((a,b)=>model.systems[a].x-model.systems[b].x);
+  const sx = {}; for (const id of order) sx[id] = model.systems[id].x;
+  for (let i=0;i<order.length;i++) for (let j=i+1;j<order.length;j++){
+    const A=order[i], B=order[j];
+    const sameBand = Math.abs(model.systems[A].y - model.systems[B].y) < Math.max(measured[A].h,measured[B].h);
+    const overlap = sx[A] + measured[A].w + 70 - sx[B];
+    if (sameBand && overlap>0) sx[B] += overlap;
+  }
+  for (const id of order) place(measured[id], sx[id], model.systems[id].y, pos);
+  return pos;
+}
+
+// ---- edge resolution: nearest visible ancestor + dedupe ---------------
+function resolveEdges(pos){
+  const out = [];
+  for (const e of model.edges){
+    const s = visibleId(e.from), t = visibleId(e.to);
+    if (s===t) continue;                 // internal to a collapsed node
+    if (!pos[s] || !pos[t]) continue;
+    const key = s+"|"+t;
+    const i = out.findIndex(o=>o.key===key);
+    const rec = { key, s, t, label:e.label, kind:e.kind };
+    if (i>=0) out[i]=rec; else out.push(rec);   // keep finest (declared later)
+  }
+  return out;
+}
+
+// ---- render -----------------------------------------------------------
+const stage = document.getElementById("stage");
+const svg = document.getElementById("edges");
+const center = b => ({x:b.x+b.w/2, y:b.y+b.h/2});
+function anchor(from,to){
+  const c=center(from), tc=center(to), dx=tc.x-c.x, dy=tc.y-c.y, hw=from.w/2, hh=from.h/2;
+  const s=Math.min(dx===0?1e9:hw/Math.abs(dx), dy===0?1e9:hh/Math.abs(dy));
+  return { x:c.x+dx*s, y:c.y+dy*s };
+}
+
+function render(){
+  const pos = computeLayout();
+  const edges = resolveEdges(pos);
+
+  stage.querySelectorAll(".node,.edge-label").forEach(n=>n.remove());
+  // draw deepest boundaries first (lower z) by sorting: boundaries before boxes
+  const ids = Object.keys(pos).sort((a,b)=>{
+    const za = pos[a].expanded?0:1, zb = pos[b].expanded?0:1; return za-zb;
+  });
+  for (const id of ids){
+    const b = pos[id], n = b.node, el = document.createElement("div");
+    if (b.type==="person"){
+      el.className="node person";
+      el.innerHTML=`<div class="role">[person]</div><div class="nm">${n.name}</div>`;
+    } else if (b.expanded){
+      const codeext = n.children && n.children.some(c=>c.type==="code");
+      el.className=`node boundary ${b.type}${codeext?" codeext":""}`;
+      el.innerHTML=`<div class="bhead"><span class="nm">${n.name}</span><span class="ty">${TYPE_LABEL[b.type]}</span></div>`
+                  +`<button class="collapse">– fold</button>`;
+      el.querySelector(".bhead").onclick=()=>{ expanded.delete(id); render(); };
+      el.querySelector(".collapse").onclick=ev=>{ ev.stopPropagation(); expanded.delete(id); render(); };
+      el.style.zIndex = 2; // boundaries sit under their children naturally via DOM order
+    } else {
+      const kids = (n.children||[]).length;
+      el.className=`node box ${b.type}${n.isnew?" isnew":""}`;
+      el.innerHTML=`<div class="nm">${n.name}</div><div class="ty">[${TYPE_LABEL[b.type]}${n.tech?": "+n.tech:""}]</div>`
+                  +(n.desc?`<div class="desc">${n.desc}</div>`:"")
+                  +(kids?`<div class="badge">${kids}</div>`:"")
+                  +(n.code?`<div class="codetag">code</div>`:"");
+      if (kids) el.onclick=()=>{ expanded.add(id); render(); };
+      el.style.zIndex = 5;
+    }
+    el.style.left=b.x+"px"; el.style.top=b.y+"px";
+    el.style.width=b.w+"px"; el.style.height=b.h+"px";
+    stage.appendChild(el);
+  }
+
+  svg.innerHTML = `<defs>${Object.entries(edgeColor).map(([k,c])=>`
+    <marker id="ar-${k}" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="${c}"/></marker>`).join("")}</defs>`;
+  for (const e of edges){
+    const a=anchor(pos[e.s],pos[e.t]), z=anchor(pos[e.t],pos[e.s]), c=edgeColor[e.kind];
+    svg.innerHTML += `<path d="M${a.x},${a.y} L${z.x},${z.y}" stroke="${c}" stroke-width="2" fill="none" marker-end="url(#ar-${e.kind})"/>`;
+    const lab=document.createElement("div"); lab.className="edge-label";
+    lab.style.left=(a.x+z.x)/2+"px"; lab.style.top=(a.y+z.y)/2+"px";
+    lab.textContent=e.label; stage.appendChild(lab);
+  }
+}
+
+document.getElementById("reset").onclick=()=>{ expanded.clear(); render(); };
+document.getElementById("all").onclick=()=>{
+  ["ds","adat","deployer"].forEach(id=>expanded.add(id)); render();
+};
+render();
+</script>
+</body>
+</html>
