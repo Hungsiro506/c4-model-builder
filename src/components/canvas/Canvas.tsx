@@ -35,6 +35,7 @@ import RelationshipEdge from './edges/RelationshipEdge'
 import {
   buildNodes,
   buildEdges,
+  buildCompositeEdges,
   buildGroupNodes,
   buildBoundaryNodes,
   buildDrillableSet,
@@ -382,8 +383,12 @@ export default function Canvas() {
     const overlayNodes = [...boundaryNodes, ...groupNodes]
     const allNodes = [...overlayNodes, ...expandedNodes]
 
-    // 5. Build final edges using post-layout positions for handle routing
-    const edges = buildEdges(workspace, view, allNodes, highlightFilters)
+    // 5. Build final edges using post-layout positions for handle routing.
+    //    When anything is expanded, re-target relationships onto nearest visible
+    //    ancestors (bundling fan-in to collapsed siblings).
+    const edges = expandedElementIds.length > 0
+      ? buildCompositeEdges(workspace, allNodes, highlightFilters)
+      : buildEdges(workspace, view, allNodes, highlightFilters)
 
     return { initialNodes: allNodes, initialEdges: edges }
   }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds])

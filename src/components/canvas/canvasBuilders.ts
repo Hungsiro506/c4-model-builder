@@ -7,7 +7,7 @@ import {
   groupSpansBoundaryClusters,
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
-import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
+import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship } from '@/types/model'
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
 function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
@@ -514,53 +514,53 @@ function pickSlots(n: number): string[] {
   return spread[n] ?? all
 }
 
-/** Build edges using final node positions for optimal handle routing. */
-export function buildEdges(
-  workspace: Workspace,
-  view: View,
+interface EdgeInfo {
+  relId: string
+  sourceId: string
+  targetId: string
+  sourceSide: string
+  targetSide: string
+  relStyle: RelationshipStyle | undefined
+  rel: Relationship
+  /** When >1, this edge summarizes a bundle of finest relationships re-targeted
+   *  onto the same visible source/target pair (expand-in-place). */
+  bundleCount?: number
+}
+
+/** Compute the handle sides for an edge between two laid-out endpoints. */
+function makeEdgeInfo(
+  rel: Relationship,
+  sourceId: string,
+  targetId: string,
+  posMap: Map<string, { x: number; y: number }>,
+  relationshipStyles: RelationshipStyle[],
+): EdgeInfo {
+  const relStyle = getRelationshipStyle(rel.tags, relationshipStyles)
+  const srcPos = posMap.get(sourceId)
+  const dstPos = posMap.get(targetId)
+  const handles = srcPos && dstPos
+    ? computeHandlePair(srcPos, dstPos)
+    : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
+  return {
+    relId: rel.id,
+    sourceId,
+    targetId,
+    sourceSide: handles.sourceHandle.split('-')[0],
+    targetSide: handles.targetHandle.split('-')[0],
+    relStyle,
+    rel,
+  }
+}
+
+/** Assign non-overlapping handle slots and assemble final React Flow edges from
+ *  pre-resolved EdgeInfos. Shared by buildEdges (view relationships) and
+ *  buildCompositeEdges (expand-in-place re-targeted relationships). */
+function assembleEdges(
+  edgeInfos: EdgeInfo[],
+  posMap: Map<string, { x: number; y: number }>,
   nodes: Node[],
   filters: HighlightFilters,
 ): Edge[] {
-  const relationshipMap = buildRelationshipMap(workspace)
-  const relationshipStyles = workspace.views.configuration.styles.relationships
-
-  // Position lookup from laid-out nodes
-  const posMap = new Map<string, { x: number; y: number }>()
-  for (const n of nodes) posMap.set(n.id, n.position)
-
-  const viewElementIds = new Set(view.elements.map(e => e.id))
-
-  // First pass: compute base side pairs for all edges
-  interface EdgeInfo {
-    relId: string
-    sourceId: string
-    targetId: string
-    sourceSide: string
-    targetSide: string
-    relStyle: ReturnType<typeof getRelationshipStyle>
-    rel: NonNullable<ReturnType<typeof relationshipMap.get>>
-  }
-
-  const edgeInfos: EdgeInfo[] = []
-  for (const viewRel of view.relationships) {
-    const rel = relationshipMap.get(viewRel.id)
-    if (!rel) continue
-    if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
-
-    const relStyle = getRelationshipStyle(rel.tags, relationshipStyles)
-    const srcPos = posMap.get(rel.sourceId)
-    const dstPos = posMap.get(rel.destinationId)
-    const handles = srcPos && dstPos
-      ? computeHandlePair(srcPos, dstPos)
-      : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
-
-    // Extract side name (e.g. "right" from "right-b-source")
-    const sourceSide = handles.sourceHandle.split('-')[0]
-    const targetSide = handles.targetHandle.split('-')[0]
-
-    edgeInfos.push({ relId: rel.id, sourceId: rel.sourceId, targetId: rel.destinationId, sourceSide, targetSide, relStyle, rel })
-  }
-
   // Second pass: count ALL edges per node+side (regardless of source/target direction),
   // then assign slots so edges sharing a side never overlap.
   const sideGroups = new Map<string, { edgeIndex: number; role: 'source' | 'target' }[]>()
@@ -634,4 +634,100 @@ export function buildEdges(
   }
 
   return edges
+}
+
+/** Build edges using final node positions for optimal handle routing. */
+export function buildEdges(
+  workspace: Workspace,
+  view: View,
+  nodes: Node[],
+  filters: HighlightFilters,
+): Edge[] {
+  const relationshipMap = buildRelationshipMap(workspace)
+  const relationshipStyles = workspace.views.configuration.styles.relationships
+
+  // Position lookup from laid-out nodes
+  const posMap = new Map<string, { x: number; y: number }>()
+  for (const n of nodes) posMap.set(n.id, n.position)
+
+  const viewElementIds = new Set(view.elements.map((e) => e.id))
+
+  const edgeInfos: EdgeInfo[] = []
+  for (const viewRel of view.relationships) {
+    const rel = relationshipMap.get(viewRel.id)
+    if (!rel) continue
+    if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
+    edgeInfos.push(makeEdgeInfo(rel, rel.sourceId, rel.destinationId, posMap, relationshipStyles))
+  }
+
+  return assembleEdges(edgeInfos, posMap, nodes, filters)
+}
+
+/** Build a child→parent id map for the whole model (container→system,
+ *  component→container). People and systems have no parent. */
+function buildParentMap(workspace: Workspace): Map<string, string> {
+  const parentOf = new Map<string, string>()
+  for (const sys of workspace.model.softwareSystems) {
+    for (const container of sys.containers) {
+      parentOf.set(container.id, sys.id)
+      for (const component of container.components) {
+        parentOf.set(component.id, container.id)
+      }
+    }
+  }
+  return parentOf
+}
+
+/**
+ * Expand-in-place edges. For each model relationship a→b, resolve both
+ * endpoints to their nearest *visible* ancestor (the deepest element actually
+ * rendered as a content node). Drop relationships that resolve to the same
+ * node (internal to a collapsed box) and dedupe pairs, bundling duplicates so
+ * a single edge can summarize ×N finest relationships fanning into a collapsed
+ * sibling.
+ */
+export function buildCompositeEdges(
+  workspace: Workspace,
+  nodes: Node[],
+  filters: HighlightFilters,
+): Edge[] {
+  const relationshipStyles = workspace.views.configuration.styles.relationships
+  const parentOf = buildParentMap(workspace)
+
+  // Visible ids = content nodes (those carrying a model element).
+  const visibleIds = new Set<string>()
+  const posMap = new Map<string, { x: number; y: number }>()
+  for (const n of nodes) {
+    posMap.set(n.id, n.position)
+    if ((n.data as { element?: ModelElement })?.element) visibleIds.add(n.id)
+  }
+
+  const visibleAncestor = (id: string): string | undefined => {
+    let cur: string | undefined = id
+    while (cur !== undefined) {
+      if (visibleIds.has(cur)) return cur
+      cur = parentOf.get(cur)
+    }
+    return undefined
+  }
+
+  const byPair = new Map<string, EdgeInfo>()
+  const edgeInfos: EdgeInfo[] = []
+  for (const rel of workspace.model.relationships) {
+    const s = visibleAncestor(rel.sourceId)
+    const t = visibleAncestor(rel.destinationId)
+    if (s === undefined || t === undefined || s === t) continue
+    const key = `${s}->${t}`
+    const existing = byPair.get(key)
+    if (existing) {
+      existing.bundleCount = (existing.bundleCount ?? 1) + 1
+      continue
+    }
+    const info = makeEdgeInfo(rel, s, t, posMap, relationshipStyles)
+    info.bundleCount = 1
+    byPair.set(key, info)
+    edgeInfos.push(info)
+  }
+
+  return assembleEdges(edgeInfos, posMap, nodes, filters)
 }
