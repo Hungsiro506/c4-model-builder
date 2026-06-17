@@ -515,6 +515,10 @@ function pickSlots(n: number): string[] {
 }
 
 interface EdgeInfo {
+  /** React Flow edge id. Defaults to the relationship id; composite edges that
+   *  fan one relationship onto several visible endpoints get a suffixed id so
+   *  React Flow keys stay unique. */
+  edgeId: string
   relId: string
   sourceId: string
   targetId: string
@@ -542,6 +546,7 @@ function makeEdgeInfo(
     ? computeHandlePair(srcPos, dstPos)
     : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
   return {
+    edgeId: rel.id,
     relId: rel.id,
     sourceId,
     targetId,
@@ -622,7 +627,7 @@ function assembleEdges(
     else if (faded) className = 'c4-edge-faded'
 
     edges.push({
-      id: e.rel.id,
+      id: e.edgeId,
       source: e.sourceId,
       target: e.targetId,
       sourceHandle: `${e.sourceSide}-${srcSlot}-source`,
@@ -770,6 +775,18 @@ function buildParentMap(workspace: Workspace): Map<string, string> {
   return parentOf
 }
 
+/** Build a parent→direct-children id map (system→containers, container→components). */
+function buildChildrenMap(workspace: Workspace): Map<string, string[]> {
+  const childrenOf = new Map<string, string[]>()
+  for (const sys of workspace.model.softwareSystems) {
+    childrenOf.set(sys.id, sys.containers.map((c) => c.id))
+    for (const container of sys.containers) {
+      childrenOf.set(container.id, container.components.map((comp) => comp.id))
+    }
+  }
+  return childrenOf
+}
+
 /**
  * Expand-in-place edges. For each model relationship a→b, resolve both
  * endpoints to their nearest *visible* ancestor (the deepest element actually
@@ -785,6 +802,7 @@ export function buildCompositeEdges(
 ): Edge[] {
   const relationshipStyles = workspace.views.configuration.styles.relationships
   const parentOf = buildParentMap(workspace)
+  const childrenOf = buildChildrenMap(workspace)
 
   // Visible ids = content nodes (those carrying a model element).
   const visibleIds = new Set<string>()
@@ -794,31 +812,54 @@ export function buildCompositeEdges(
     if ((n.data as { element?: ModelElement })?.element) visibleIds.add(n.id)
   }
 
-  const visibleAncestor = (id: string): string | undefined => {
+  // Resolve a relationship endpoint to the visible node(s) that should carry the
+  // edge. Two directions, because an element can be hidden for opposite reasons:
+  //   • Collapsed: the element sits inside a collapsed ancestor → walk UP to the
+  //     nearest visible ancestor (the box it folds into).
+  //   • Expanded: the element's own node was replaced by its children → walk DOWN
+  //     to its visible descendants (fan the edge onto them) so the relationship
+  //     isn't dropped. Without this, e.g. A→C vanishes the moment C is expanded.
+  const resolveDown = (id: string, acc: Set<string>) => {
+    if (visibleIds.has(id)) { acc.add(id); return }
+    for (const child of childrenOf.get(id) ?? []) resolveDown(child, acc)
+  }
+  const resolveEndpoint = (id: string): string[] => {
     let cur: string | undefined = id
     while (cur !== undefined) {
-      if (visibleIds.has(cur)) return cur
+      if (visibleIds.has(cur)) return [cur]
       cur = parentOf.get(cur)
     }
-    return undefined
+    const down = new Set<string>()
+    resolveDown(id, down)
+    return [...down]
   }
 
   const byPair = new Map<string, EdgeInfo>()
   const edgeInfos: EdgeInfo[] = []
+  // Count pairs already emitted per relationship so a fan-out (one rel → many
+  // visible endpoints) yields unique React Flow edge ids.
+  const relPairCount = new Map<string, number>()
   for (const rel of workspace.model.relationships) {
-    const s = visibleAncestor(rel.sourceId)
-    const t = visibleAncestor(rel.destinationId)
-    if (s === undefined || t === undefined || s === t) continue
-    const key = `${s}->${t}`
-    const existing = byPair.get(key)
-    if (existing) {
-      existing.bundleCount = (existing.bundleCount ?? 1) + 1
-      continue
+    const sources = resolveEndpoint(rel.sourceId)
+    const targets = resolveEndpoint(rel.destinationId)
+    for (const s of sources) {
+      for (const t of targets) {
+        if (s === t) continue
+        const key = `${s}->${t}`
+        const existing = byPair.get(key)
+        if (existing) {
+          existing.bundleCount = (existing.bundleCount ?? 1) + 1
+          continue
+        }
+        const info = makeEdgeInfo(rel, s, t, posMap, relationshipStyles)
+        info.bundleCount = 1
+        const seen = relPairCount.get(rel.id) ?? 0
+        relPairCount.set(rel.id, seen + 1)
+        if (seen > 0) info.edgeId = `${rel.id}#${seen}`
+        byPair.set(key, info)
+        edgeInfos.push(info)
+      }
     }
-    const info = makeEdgeInfo(rel, s, t, posMap, relationshipStyles)
-    info.bundleCount = 1
-    byPair.set(key, info)
-    edgeInfos.push(info)
   }
 
   return assembleEdges(edgeInfos, posMap, nodes, filters)
