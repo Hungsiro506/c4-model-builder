@@ -67,7 +67,11 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
   }
   const sizeOf = (id: string) => {
     const st = subtreeById.get(id)
-    return st ? { width: st.width, height: st.height } : { width: DEFAULT_W, height: DEFAULT_H }
+    if (!st) return { width: DEFAULT_W, height: DEFAULT_H }
+    // Expanded but childless: reserve the empty-expand footprint so the inner
+    // empty boundary (drawn later) fits and the parent box wraps it.
+    if (st.nodes.length === 0) return { width: EMPTY_EXPAND_W, height: EMPTY_EXPAND_H }
+    return { width: st.width, height: st.height }
   }
 
   // dagre over the children using relationships internal to this element.
@@ -111,9 +115,16 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
     const x = tl.x + normDx
     const y = tl.y + normDy
     const subtree = subtreeById.get(child.id)
-    if (subtree) {
-      // Expanded child: place its whole subtree at (x, y).
+    if (subtree && subtree.nodes.length > 0) {
+      // Expanded child with content: place its whole subtree at (x, y).
       nodes.push(...shiftNodes(subtree.nodes, x, y))
+    } else if (subtree) {
+      // Expanded but childless: emit a hidden own-node so it survives overlay
+      // rebuilds and buildExpandBoundaryNodes can draw an empty boundary (with
+      // an "add child" affordance) over its reserved footprint. Mirrors the
+      // top-level childless handling in expandComposite.
+      const own = buildContentNode(child, { x, y }, ctx)
+      nodes.push({ ...own, hidden: true })
     } else {
       nodes.push(buildContentNode(child, { x, y }, ctx))
     }

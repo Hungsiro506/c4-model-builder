@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Minimize2, Plus } from 'lucide-react'
 import type { NodeProps } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
+import NodeHandles from './NodeHandles'
 
 interface BoundaryNodeData {
   name: string
@@ -107,6 +108,10 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
           userSelect: 'none',
         }}
       >
+      {/* Expand boundaries can be edge endpoints: a parent-level relationship
+          (e.g. A→B) attaches to this wrapper box when B is expanded, instead of
+          diving onto a child. Handles are invisible anchors for that routing. */}
+      {data.collapsible && <NodeHandles />}
       {data.empty && (
         <div
           style={{

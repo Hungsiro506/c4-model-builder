@@ -1,10 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import type { Node } from '@xyflow/react'
 import type { Workspace } from '@/types/model'
-import { buildCompositeEdges } from './canvasBuilders'
+import { buildCompositeEdges, EXPAND_BOUNDARY_PREFIX } from './canvasBuilders'
 import type { HighlightFilters } from '@/lib/highlight'
 
 const NO_FILTERS: HighlightFilters = { tags: [], statuses: [], techs: [], teams: [] }
+
+/** Wrapper boundary overlay node for an expanded element. */
+function boundaryNode(elementId: string, x: number, y: number): Node {
+  return {
+    id: `${EXPAND_BOUNDARY_PREFIX}${elementId}`,
+    type: 'boundary',
+    position: { x, y },
+    measured: { width: 280, height: 200 },
+    data: { name: elementId, typeLabel: 'Software System', collapsible: true, elementId },
+  } as unknown as Node
+}
 
 /** Content node carrying a model element (so buildCompositeEdges sees it as visible). */
 function contentNode(id: string, type: string, name: string, x: number, y: number): Node {
@@ -47,20 +58,23 @@ function ws(): Workspace {
 }
 
 describe('buildCompositeEdges — expanded endpoint re-target', () => {
-  it('keeps A→C as A→c1 when C is expanded (its node replaced by its container)', () => {
-    // C expanded → C's node is gone, replaced by its child c1.
+  it('keeps A→C as A→C-boundary when C is expanded (parent-level edge stays on the wrapper)', () => {
+    // C expanded → C's node is gone, replaced by its child c1 + a wrapper box.
     const nodes = [
       contentNode('dev', 'person', 'Developer', 0, 0),
       contentNode('sysA', 'softwareSystem', 'A', 300, 0),
       contentNode('sysB', 'softwareSystem', 'B', 600, 0),
       contentNode('c1', 'container', 'C1', 300, 300),
+      boundaryNode('sysC', 280, 280),
     ]
 
     const edges = buildCompositeEdges(ws(), nodes, NO_FILTERS)
     const pairs = edges.map((e) => `${e.source}->${e.target}`).sort()
 
-    // A→C must survive, re-targeted onto the visible container c1.
-    expect(pairs).toContain('sysA->c1')
+    // A→C survives but stays at the parent level — it attaches to C's wrapper
+    // boundary, NOT its child container c1.
+    expect(pairs).toContain(`sysA->${EXPAND_BOUNDARY_PREFIX}sysC`)
+    expect(pairs).not.toContain('sysA->c1')
     // The other relationships are unaffected.
     expect(pairs).toContain('sysA->sysB')
     expect(pairs).toContain('dev->sysA')

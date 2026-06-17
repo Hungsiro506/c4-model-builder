@@ -76,6 +76,41 @@ test.describe('Expand-in-place add-at-parent', () => {
     expect(child!.x + child!.width).toBeLessThanOrEqual(box!.x + box!.width + 1)
   })
 
+  test('nested: expand container then add a component inside it', async ({ workspace }) => {
+    const aId = (await workspace.getElementByName('A'))!.id
+    await expandNode(workspace.page, aId)
+    await workspace.page.getByRole('button', { name: 'Add container to A' }).click()
+    await workspace.page.waitForTimeout(300)
+
+    const container = (await workspace.getElementByName('New Container'))!
+    // System boundary + container both still visible (container did NOT vanish).
+    expect(await expandBoundaryBox(workspace.page, aId)).not.toBeNull()
+    expect(await isNodeVisible(workspace.page, container.id)).toBe(true)
+
+    // Expand the (childless) container → its own empty boundary with controls.
+    await expandNode(workspace.page, container.id)
+    expect(await expandBoundaryBox(workspace.page, container.id)).not.toBeNull()
+    // System boundary must STILL be present (the bug collapsed everything into A).
+    expect(await expandBoundaryBox(workspace.page, aId)).not.toBeNull()
+
+    await expect(workspace.page.getByRole('button', { name: 'Add component to New Container' })).toBeVisible()
+    await workspace.page.getByRole('button', { name: 'Add component to New Container' }).click()
+    await workspace.page.waitForTimeout(300)
+
+    const component = await workspace.getElementByName('New Component')
+    expect(component).not.toBeNull()
+    expect(await isNodeVisible(workspace.page, component!.id)).toBe(true)
+
+    // Component sits inside the container boundary, which nests inside the system box.
+    const ctrBox = await expandBoundaryBox(workspace.page, container.id)
+    const sysBox = await expandBoundaryBox(workspace.page, aId)
+    const comp = await nodeBox(workspace.page, component!.id)
+    expect(comp!.x).toBeGreaterThanOrEqual(ctrBox!.x - 1)
+    expect(comp!.y).toBeGreaterThanOrEqual(ctrBox!.y - 1)
+    expect(ctrBox!.x).toBeGreaterThan(sysBox!.x - 1)
+    expect(ctrBox!.x + ctrBox!.width).toBeLessThanOrEqual(sysBox!.x + sysBox!.width + 1)
+  })
+
   test('collapsing after add leaves no stray top-level node', async ({ workspace }) => {
     const aId = (await workspace.getElementByName('A'))!.id
     await expandNode(workspace.page, aId)
