@@ -167,6 +167,24 @@ test.describe('Expand-in-place (semantic zoom)', () => {
     }
   })
 
+  test('11. expand via node button, collapse via boundary button (real UI gestures)', async ({ workspace }) => {
+    // Expand via the actual node zoom button, not the JS test hook.
+    await workspace.page.locator('.react-flow__node[data-id="edca"]').hover()
+    await workspace.page.getByRole('button', { name: 'Expand EDCA' }).click()
+    await workspace.page.waitForTimeout(300)
+    expect(await isNodeVisible(workspace.page, 'web')).toBe(true)
+    expect(await isNodeVisible(workspace.page, 'hermes')).toBe(true)
+    expect(await expandBoundaryBox(workspace.page, 'edca')).not.toBeNull()
+
+    // Collapse via the boundary header button (the only UI affordance once the
+    // node has been replaced by its children).
+    await workspace.page.getByRole('button', { name: 'Collapse EDCA' }).click()
+    await workspace.page.waitForTimeout(300)
+    expect(await isNodeVisible(workspace.page, 'web')).toBe(false)
+    expect(await isNodeVisible(workspace.page, 'edca')).toBe(true)
+    expect(await workspace.getNodeCount()).toBe(6)
+  })
+
   test('10. nested expand (system then container) keeps boundary + no overlap', async ({ workspace }) => {
     // dataStore (system) → deploymentWorker (container) → components.
     await expandNode(workspace.page, 'dataStore')

@@ -716,7 +716,7 @@ export function buildExpandBoundaryNodes(
       position: { x, y },
       measured: { width: w, height: h },
       style: { width: w, height: h, pointerEvents: 'none' },
-      data: { name: info.name, typeLabel },
+      data: { name: info.name, typeLabel, collapsible: true, elementId: expandedId },
       // Deeper boxes sit above their parent box but still behind content (>= 0).
       zIndex: -3 + Math.min(depthOf(expandedId), 1),
       selectable: false,

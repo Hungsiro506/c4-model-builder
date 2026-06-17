@@ -1,13 +1,20 @@
 import { memo } from 'react'
+import { Minimize2 } from 'lucide-react'
 import type { NodeProps } from '@xyflow/react'
+import { useWorkspaceStore } from '@/store/workspace'
 
 interface BoundaryNodeData {
   name: string
   typeLabel: string
   empty?: boolean
+  /** Expand-in-place boundary: render a collapse control that folds the
+   *  element's children back into a single collapsed node. */
+  collapsible?: boolean
+  elementId?: string
 }
 
 function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }) {
+  const collapseElement = useWorkspaceStore((s) => s.collapseElement)
   const emptyTitle = data.typeLabel === 'Software System'
     ? 'Add containers to this system'
     : 'Add components to this container'
@@ -23,32 +30,45 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
           zIndex: 1,
           padding: '8px 12px',
           display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: 8,
           cursor: 'grab',
           pointerEvents: 'auto',
           touchAction: 'none',
           userSelect: 'none',
         }}
       >
-        <span style={{
-          fontSize: 'var(--text-xs-plus)',
-          fontWeight: 700,
-          color: 'var(--canvas-boundary-title, var(--color-text-dim))',
-          letterSpacing: '0.02em',
-          whiteSpace: 'nowrap',
-        }}>
-          {data.name}
-        </span>
-        <span style={{
-          fontSize: 'var(--text-xxs)',
-          fontWeight: 500,
-          color: 'var(--canvas-boundary-subtitle, var(--color-text-ghost))',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-        }}>
-          {data.typeLabel}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{
+            fontSize: 'var(--text-xs-plus)',
+            fontWeight: 700,
+            color: 'var(--canvas-boundary-title, var(--color-text-dim))',
+            letterSpacing: '0.02em',
+            whiteSpace: 'nowrap',
+          }}>
+            {data.name}
+          </span>
+          <span style={{
+            fontSize: 'var(--text-xxs)',
+            fontWeight: 500,
+            color: 'var(--canvas-boundary-subtitle, var(--color-text-ghost))',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+          }}>
+            {data.typeLabel}
+          </span>
+        </div>
+        {data.collapsible && data.elementId && (
+          <button
+            className="c4-node-action-btn nodrag"
+            style={{ marginTop: 1 }}
+            onClick={(e) => { e.stopPropagation(); collapseElement(data.elementId!) }}
+            aria-label={`Collapse ${data.name}`}
+          >
+            <Minimize2 size={11} aria-hidden="true" />
+          </button>
+        )}
       </div>
       <div
         className={`c4-boundary-node ${selected ? 'selected' : ''}`}
