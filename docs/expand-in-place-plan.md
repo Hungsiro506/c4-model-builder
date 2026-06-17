@@ -70,7 +70,20 @@ Cases (`e2e/expand-in-place/expand.spec.ts`):
 6. Both expanded → finest edges between children.
 7. Color persists across zoom. [core — the real workflow]
 8. Collapse → children gone, siblings restored to baseline.
-9. Persist: reload restores `expandedElementIds` (Stage 2).
+9. Expand draws a boundary box wrapping the children.
+10. Nested expand (system → container) keeps both boundaries nested, no overlap.
+11. Real UI gestures: zoom button expands; boundary-header button collapses.
+
+## Persistence — deliberately deferred
+
+Expand state is **not** persisted. On reopen everything starts collapsed at the
+system level (store inits `expandedElementIds: []`; `loadWorkspace` does not set it).
+The user re-expands from scratch each session — matches expectation, keeps the `.dsl`
+pure and the sidecar minimal.
+
+Future seam (if persistence is ever wanted): add `expandedElementIds` to `SidecarView`
+in `src/lib/sidecar.ts` and hydrate the store slice on load. No DSL changes — expand
+state is layout metadata, so it rides the sidecar like positions/viewport.
 
 ## Open items (not yet decided)
 
