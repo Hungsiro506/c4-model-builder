@@ -25,6 +25,16 @@ async function isNodeVisible(page: Page, id: string): Promise<boolean> {
   return (await page.locator(`.react-flow__node[data-id="${id}"]`).count()) > 0
 }
 
+async function expandBoundaryBox(page: Page, id: string) {
+  return page.locator(`.react-flow__node[data-id="__expand_boundary__${id}"]`).first().boundingBox()
+}
+
+function overlaps(a: { x: number; y: number; width: number; height: number },
+                  b: { x: number; y: number; width: number; height: number }): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x
+    && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
 // parseAndLoad only waits for the canvas to appear, not for the initial
 // fit-to-view to settle. Wait until the viewport transform stops changing so
 // position assertions compare against a stable (already-fitted) baseline.
@@ -138,5 +148,44 @@ test.describe('Expand-in-place (semantic zoom)', () => {
     expect(await workspace.getNodeCount()).toBe(6)
     const after = await nodeBox(workspace.page, 'rms')
     expect(Math.abs(after!.x - before!.x)).toBeLessThanOrEqual(2)
+  })
+
+  // ── Stage 4: boundary visual + gap-shift (no overlap) ─────────────────
+
+  test('9. expanding draws a boundary box wrapping the children', async ({ workspace }) => {
+    await expandNode(workspace.page, 'edca')
+    const box = await expandBoundaryBox(workspace.page, 'edca')
+    expect(box).not.toBeNull()
+    // Children must sit inside the boundary.
+    const web = await nodeBox(workspace.page, 'web')
+    const hermes = await nodeBox(workspace.page, 'hermes')
+    for (const child of [web, hermes]) {
+      expect(child!.x).toBeGreaterThanOrEqual(box!.x - 1)
+      expect(child!.y).toBeGreaterThanOrEqual(box!.y - 1)
+      expect(child!.x + child!.width).toBeLessThanOrEqual(box!.x + box!.width + 1)
+      expect(child!.y + child!.height).toBeLessThanOrEqual(box!.y + box!.height + 1)
+    }
+  })
+
+  test('10. nested expand (system then container) keeps boundary + no overlap', async ({ workspace }) => {
+    // dataStore (system) → deploymentWorker (container) → components.
+    await expandNode(workspace.page, 'dataStore')
+    await expandNode(workspace.page, 'deploymentWorker')
+    // Both boundary boxes present (nested).
+    const sysBox = await expandBoundaryBox(workspace.page, 'dataStore')
+    const ctrBox = await expandBoundaryBox(workspace.page, 'deploymentWorker')
+    expect(sysBox).not.toBeNull()
+    expect(ctrBox).not.toBeNull()
+    // Components visible.
+    expect(await isNodeVisible(workspace.page, 'dwApi')).toBe(true)
+    expect(await isNodeVisible(workspace.page, 'dwScheduler')).toBe(true)
+    // Container box nests inside the system box.
+    expect(ctrBox!.x).toBeGreaterThanOrEqual(sysBox!.x - 1)
+    expect(ctrBox!.x + ctrBox!.width).toBeLessThanOrEqual(sysBox!.x + sysBox!.width + 1)
+    // The expanded container box must NOT overlap its sibling containers.
+    const evt = await nodeBox(workspace.page, 'eventConductor')
+    const skemata = await nodeBox(workspace.page, 'skemataDb')
+    expect(overlaps(ctrBox!, evt!)).toBe(false)
+    expect(overlaps(ctrBox!, skemata!)).toBe(false)
   })
 })

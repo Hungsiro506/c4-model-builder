@@ -636,6 +636,98 @@ function assembleEdges(
   return edges
 }
 
+/** Overlay-node id prefix for the box drawn around an expanded element's
+ *  children (semantic zoom). Mirrors SCOPE_BOUNDARY_PREFIX in Canvas. */
+export const EXPAND_BOUNDARY_PREFIX = '__expand_boundary__'
+
+// Must match the inner padding expandComposite uses so the boundary box lines
+// up with where the children were actually placed.
+const EB_PAD_X = 40
+const EB_PAD_TOP = 88
+const EB_PAD_BOTTOM = 40
+
+/** Draw a boundary box around the children of each expanded element. Computed
+ *  from the rendered child content nodes so it survives the overlay rebuild
+ *  pass (which strips and regenerates overlays). One box per expanded element;
+ *  nested expands nest (a container box inside its system box). */
+export function buildExpandBoundaryNodes(
+  contentNodes: Node[],
+  expandedIds: Set<string>,
+  workspace: Workspace,
+): Node[] {
+  if (expandedIds.size === 0) return []
+
+  const parentOf = buildParentMap(workspace)
+
+  // id → element metadata for label/type (the expanded element's own node is
+  // gone — replaced by its children — so read names from the model).
+  const meta = new Map<string, { name: string; type: ModelElement['type'] }>()
+  for (const sys of workspace.model.softwareSystems) {
+    meta.set(sys.id, { name: sys.name, type: 'softwareSystem' })
+    for (const c of sys.containers) {
+      meta.set(c.id, { name: c.name, type: 'container' })
+      for (const comp of c.components) meta.set(comp.id, { name: comp.name, type: 'component' })
+    }
+  }
+
+  const depthOf = (id: string): number => {
+    let d = 0
+    let cur = parentOf.get(id)
+    while (cur !== undefined) { d++; cur = parentOf.get(cur) }
+    return d
+  }
+
+  const ancestorIsExpanded = (id: string, target: string): boolean => {
+    let cur = parentOf.get(id)
+    while (cur !== undefined) {
+      if (cur === target) return true
+      cur = parentOf.get(cur)
+    }
+    return false
+  }
+
+  const boundaries: Node[] = []
+  for (const expandedId of expandedIds) {
+    const info = meta.get(expandedId)
+    if (!info) continue
+
+    const members = contentNodes.filter((n) => ancestorIsExpanded(n.id, expandedId))
+    if (members.length === 0) continue
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const n of members) {
+      const r = nodeRect(n)
+      minX = Math.min(minX, r.x)
+      minY = Math.min(minY, r.y)
+      maxX = Math.max(maxX, r.x + r.w)
+      maxY = Math.max(maxY, r.y + r.h)
+    }
+
+    const x = minX - EB_PAD_X
+    const y = minY - EB_PAD_TOP
+    const w = (maxX - minX) + EB_PAD_X * 2
+    const h = (maxY - minY) + EB_PAD_TOP + EB_PAD_BOTTOM
+    const typeLabel = info.type === 'softwareSystem' ? 'Software System'
+      : info.type === 'container' ? 'Container' : 'Component'
+
+    boundaries.push({
+      id: `${EXPAND_BOUNDARY_PREFIX}${expandedId}`,
+      type: 'boundary',
+      position: { x, y },
+      measured: { width: w, height: h },
+      style: { width: w, height: h, pointerEvents: 'none' },
+      data: { name: info.name, typeLabel },
+      // Deeper boxes sit above their parent box but still behind content (>= 0).
+      zIndex: -3 + Math.min(depthOf(expandedId), 1),
+      selectable: false,
+      draggable: false,
+      focusable: false,
+    })
+  }
+
+  return boundaries
+}
+
 /** Build edges using final node positions for optimal handle routing. */
 export function buildEdges(
   workspace: Workspace,

@@ -41,9 +41,12 @@ import {
   buildDrillableSet,
   buildBoundaryLayoutClusters,
   buildElementStyleIndex,
+  buildExpandBoundaryNodes,
+  EXPAND_BOUNDARY_PREFIX,
 } from './canvasBuilders'
 import { highlightActive } from '@/lib/highlight'
 import { expandComposite } from '@/lib/expandComposite'
+import { axisForDirection, gapShiftMany } from '@/lib/expandLayout'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -134,13 +137,14 @@ function sameOverlayGeometry(a: Node, b: Node): boolean {
   return samePosition && sameSize && sameState && sameData
 }
 
-function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, nodes: Node[]): Node[] {
+function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, nodes: Node[], expandedIds: Set<string> = new Set()): Node[] {
   const contentOnly = nodes.filter((n) => !isOverlayNode(n))
   const previousOverlays = new Map(nodes.filter(isOverlayNode).map((n) => [n.id, n]))
   const boundaryClusters = view ? buildBoundaryLayoutClusters(workspace, view) : []
   const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters)
   const updatedBoundaries = view ? buildBoundaryNodes(workspace, view, contentOnly, updatedGroups) : []
-  const overlays = [...updatedBoundaries, ...updatedGroups].map((overlay) => {
+  const updatedExpandBoundaries = buildExpandBoundaryNodes(contentOnly, expandedIds, workspace)
+  const overlays = [...updatedBoundaries, ...updatedExpandBoundaries, ...updatedGroups].map((overlay) => {
     const previous = previousOverlays.get(overlay.id)
     return previous && sameOverlayGeometry(previous, overlay) ? previous : overlay
   })
@@ -362,25 +366,48 @@ export default function Canvas() {
     const laidOut = applyAutoLayout(layoutNodes, tempEdges, view, workspace.model.groups, direction, boundaryInternalIds, boundaryClusters)
 
     // 3b. Expand-in-place: replace expanded top-level nodes with their children,
-    //     laid out inside the footprint the collapsed node occupied.
-    const expandedNodes = expandedElementIds.length > 0
-      ? expandComposite(laidOut, {
-          expandedIds: new Set(expandedElementIds),
-          direction,
-          relationships: workspace.model.relationships,
-          styleIndex: buildElementStyleIndex(workspace, themeStyles),
-          active: highlightActive(highlightFilters),
-          filters: highlightFilters,
-          drillableIds,
-          onDrillIn: stableDrillInto,
-          viewCountMap,
-        }).nodes
-      : laidOut
+    //     laid out inside the footprint the collapsed node occupied. First a
+    //     sizing pass measures each expanded box's grown footprint, then we
+    //     gap-shift siblings out of the way so the children don't overlap them,
+    //     then we expand into the shifted layout.
+    let expandedNodes = laidOut
+    if (expandedElementIds.length > 0) {
+      const expandCtx = {
+        expandedIds: new Set(expandedElementIds),
+        direction,
+        relationships: workspace.model.relationships,
+        styleIndex: buildElementStyleIndex(workspace, themeStyles),
+        active: highlightActive(highlightFilters),
+        filters: highlightFilters,
+        drillableIds,
+        onDrillIn: stableDrillInto,
+        viewCountMap,
+      }
+      // Sizing pass: how much each top-level expanded box grows vs 200×100.
+      const { growth } = expandComposite(laidOut, expandCtx)
+      const axis = axisForDirection(direction)
+      const shifts = growth.map((g) => ({
+        expandedId: g.expandedId,
+        delta: axis === 'x' ? Math.max(0, g.width - 200) : Math.max(0, g.height - 100),
+      }))
+      const layoutNodesForShift = laidOut.map((n) => ({
+        id: n.id,
+        position: n.position,
+        width: n.measured?.width ?? (Number(n.style?.width) || 200),
+        height: n.measured?.height ?? (Number(n.style?.height) || 100),
+      }))
+      const shiftedById = new Map(
+        gapShiftMany(layoutNodesForShift, shifts, axis).map((n) => [n.id, n.position]),
+      )
+      const shiftedLaidOut = laidOut.map((n) => ({ ...n, position: shiftedById.get(n.id) ?? n.position }))
+      expandedNodes = expandComposite(shiftedLaidOut, expandCtx).nodes
+    }
 
     // 4. Build group background nodes and scope boundary using post-layout positions
     const groupNodes = buildGroupNodes(workspace, workspace.model.groups, expandedNodes, boundaryClusters)
     const boundaryNodes = buildBoundaryNodes(workspace, view, expandedNodes, groupNodes)
-    const overlayNodes = [...boundaryNodes, ...groupNodes]
+    const expandBoundaries = buildExpandBoundaryNodes(expandedNodes, new Set(expandedElementIds), workspace)
+    const overlayNodes = [...boundaryNodes, ...expandBoundaries, ...groupNodes]
     const allNodes = [...overlayNodes, ...expandedNodes]
 
     // 5. Build final edges using post-layout positions for handle routing.
@@ -428,8 +455,10 @@ export default function Canvas() {
   // Keep stable refs so fitContentNodes (useCallback) always sees current values
   const workspaceRef = useRef(workspace)
   const viewRef = useRef(view)
+  const expandedIdsRef = useRef<Set<string>>(new Set(expandedElementIds))
   useEffect(() => { workspaceRef.current = workspace }, [workspace])
   useEffect(() => { viewRef.current = view }, [view])
+  useEffect(() => { expandedIdsRef.current = new Set(expandedElementIds) }, [expandedElementIds])
 
   // Rebuild group + boundary overlays using real measured node sizes. Polls
   // until React Flow has finished measuring; safe to call after any change
@@ -463,9 +492,9 @@ export default function Canvas() {
     }
     setNodes((prev) => {
       const contentOnly = prev
-        .filter(n => !n.id.startsWith('group-') && !n.id.startsWith('__scope_boundary__'))
+        .filter(n => !n.id.startsWith('group-') && !n.id.startsWith('__scope_boundary__') && !n.id.startsWith(EXPAND_BOUNDARY_PREFIX))
         .map(n => ({ ...n, measured: measuredById.get(n.id) ?? n.measured }))
-      return rebuildNodesWithOverlays(ws, v, contentOnly)
+      return rebuildNodesWithOverlays(ws, v, contentOnly, expandedIdsRef.current)
     })
   }, [reactFlowInstance, setNodes])
 
@@ -662,7 +691,7 @@ export default function Canvas() {
     }
     // When content nodes get measured/resized, rebuild group/boundary overlays
     // so they wrap the actual rendered sizes, not the 200×100 dagre defaults.
-    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && !(c.id as string).startsWith('__scope_boundary__'))) {
+    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && !(c.id as string).startsWith('__scope_boundary__') && !(c.id as string).startsWith(EXPAND_BOUNDARY_PREFIX))) {
       requestAnimationFrame(rebuildOverlays)
     }
   }, [onNodesChange, fitContentNodes, rebuildOverlays])
@@ -779,7 +808,7 @@ export default function Canvas() {
         })
         const ws = workspaceRef.current
         if (!ws || ctx.memberStart.size === 0) return moved
-        return rebuildNodesWithOverlays(ws, viewRef.current, moved)
+        return rebuildNodesWithOverlays(ws, viewRef.current, moved, expandedIdsRef.current)
       })
       return
     }
@@ -788,7 +817,7 @@ export default function Canvas() {
     if (!ws || isOverlayNode(node)) return
     setNodes((prev) => {
       const moved = prev.map((n) => n.id === node.id ? { ...n, position: node.position } : n)
-      return rebuildNodesWithOverlays(ws, viewRef.current, moved)
+      return rebuildNodesWithOverlays(ws, viewRef.current, moved, expandedIdsRef.current)
     })
   }, [setNodes])
 
@@ -996,7 +1025,7 @@ export default function Canvas() {
       const v = viewRef.current
       if (ws && shouldRebuildOverlays) {
         setNodes(prev => {
-          return rebuildNodesWithOverlays(ws, v, prev)
+          return rebuildNodesWithOverlays(ws, v, prev, expandedIdsRef.current)
         })
       }
       // Reset drag flag slightly after stop so any trailing onSelectionChange is still suppressed
