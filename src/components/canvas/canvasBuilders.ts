@@ -8,6 +8,7 @@ import {
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship } from '@/types/model'
+import { EMPTY_EXPAND_W, EMPTY_EXPAND_H } from '@/lib/expandComposite'
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
 function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
@@ -696,12 +697,23 @@ export function buildExpandBoundaryNodes(
   // wrap the same descendants, so without nesting they'd come out identical and
   // overlap exactly. Including the inner boundary rect makes each parent box
   // strictly larger than its child by one padding ring.
+  // The hidden own-node of an expanded element with no children yet (kept in the
+  // graph by expandComposite so its position survives overlay rebuilds). Used to
+  // anchor an empty boundary the user can add the first child into.
+  const ownNodeById = new Map<string, Node>()
+  for (const n of contentNodes) {
+    if (expandedIds.has(n.id)) ownNodeById.set(n.id, n)
+  }
+
   const ordered = [...expandedIds].sort((a, b) => depthOf(b) - depthOf(a))
   const rectById = new Map<string, OverlayRect>()
   const boundaries: Node[] = []
   for (const expandedId of ordered) {
     const info = meta.get(expandedId)
     if (!info) continue
+
+    const typeLabel = info.type === 'softwareSystem' ? 'Software System'
+      : info.type === 'container' ? 'Container' : 'Component'
 
     const memberRects: OverlayRect[] = contentNodes
       .filter((n) => ancestorIsExpanded(n.id, expandedId))
@@ -710,7 +722,29 @@ export function buildExpandBoundaryNodes(
     for (const [otherId, rect] of rectById) {
       if (ancestorIsExpanded(otherId, expandedId)) memberRects.push(rect)
     }
-    if (memberRects.length === 0) continue
+    if (memberRects.length === 0) {
+      // Expanded but childless: draw an empty boundary over the footprint its
+      // hidden own-node occupies, with an "add child" affordance + collapse.
+      const own = ownNodeById.get(expandedId)
+      if (!own) continue
+      // Match the footprint gap-shift reserved (EMPTY_EXPAND_W/H), anchored at
+      // the hidden node's leading corner, so the boundary fills that gap exactly.
+      const r: OverlayRect = { x: own.position.x, y: own.position.y, w: EMPTY_EXPAND_W, h: EMPTY_EXPAND_H }
+      rectById.set(expandedId, r)
+      boundaries.push({
+        id: `${EXPAND_BOUNDARY_PREFIX}${expandedId}`,
+        type: 'boundary',
+        position: { x: r.x, y: r.y },
+        measured: { width: r.w, height: r.h },
+        style: { width: r.w, height: r.h, pointerEvents: 'none' },
+        data: { name: info.name, typeLabel, empty: true, collapsible: true, elementId: expandedId },
+        zIndex: -3 + Math.min(depthOf(expandedId), 1),
+        selectable: false,
+        draggable: false,
+        focusable: false,
+      })
+      continue
+    }
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
     for (const r of memberRects) {
@@ -725,8 +759,6 @@ export function buildExpandBoundaryNodes(
     const w = (maxX - minX) + EB_PAD_X * 2
     const h = (maxY - minY) + EB_PAD_TOP + EB_PAD_BOTTOM
     rectById.set(expandedId, { x, y, w, h })
-    const typeLabel = info.type === 'softwareSystem' ? 'Software System'
-      : info.type === 'container' ? 'Container' : 'Component'
 
     boundaries.push({
       id: `${EXPAND_BOUNDARY_PREFIX}${expandedId}`,
@@ -822,7 +854,10 @@ export function buildCompositeEdges(
   const posMap = new Map<string, { x: number; y: number }>()
   for (const n of nodes) {
     posMap.set(n.id, n.position)
-    if ((n.data as { element?: ModelElement })?.element) visibleIds.add(n.id)
+    // Hidden own-nodes of childless expanded elements stay in the graph (to
+    // preserve position) but aren't rendered — exclude them so edges resolve to
+    // a real visible endpoint, not an invisible box.
+    if (!n.hidden && (n.data as { element?: ModelElement })?.element) visibleIds.add(n.id)
   }
 
   // Resolve a relationship endpoint to the visible node(s) that should carry the

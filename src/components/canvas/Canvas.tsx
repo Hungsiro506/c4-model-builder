@@ -586,7 +586,14 @@ export default function Canvas() {
   }, [])
 
   useEffect(() => {
-    const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}:${expandedElementIds.join(',')}`
+    // The content-node id set is included so expand-in-place child adds register
+    // as structural: those use skipActiveView (they render via parent expansion,
+    // not the active view), so view.elements.length stays flat. The node *count*
+    // can also stay flat — adding the first child swaps the parent's hidden
+    // placeholder node for the child — so we key off the actual node ids, which
+    // do change. Without this the new child never reaches React Flow state.
+    const nodeIdSignal = initialNodes.map((n) => n.id).join(',')
+    const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}:${expandedElementIds.join(',')}:${nodeIdSignal}`
     if (signal !== lastStructuralSignal.current) {
       const prevSignal = lastStructuralSignal.current
       lastStructuralSignal.current = signal

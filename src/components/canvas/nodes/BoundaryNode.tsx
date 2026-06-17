@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Minimize2 } from 'lucide-react'
+import { Minimize2, Plus } from 'lucide-react'
 import type { NodeProps } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 
@@ -15,9 +15,21 @@ interface BoundaryNodeData {
 
 function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }) {
   const collapseElement = useWorkspaceStore((s) => s.collapseElement)
-  const emptyTitle = data.typeLabel === 'Software System'
+  const addContainer = useWorkspaceStore((s) => s.addContainer)
+  const addComponent = useWorkspaceStore((s) => s.addComponent)
+  const isSystem = data.typeLabel === 'Software System'
+  const emptyTitle = isSystem
     ? 'Add containers to this system'
     : 'Add components to this container'
+
+  // Expand-in-place add: create a child of the expanded element, shown inside
+  // this boundary via the parent's expansion. skipActiveView keeps it out of
+  // the underlying (e.g. landscape) view so it never renders as a stray node.
+  const addChild = () => {
+    if (!data.elementId) return
+    if (isSystem) addContainer(data.elementId, 'New Container', undefined, undefined, { skipActiveView: true })
+    else addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
+  }
 
   return (
     <>
@@ -60,14 +72,24 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
           </span>
         </div>
         {data.collapsible && data.elementId && (
-          <button
-            className="c4-node-action-btn nodrag"
-            style={{ marginTop: 1 }}
-            onClick={(e) => { e.stopPropagation(); collapseElement(data.elementId!) }}
-            aria-label={`Collapse ${data.name}`}
-          >
-            <Minimize2 size={11} aria-hidden="true" />
-          </button>
+          <>
+            <button
+              className="c4-node-action-btn nodrag"
+              style={{ marginTop: 1 }}
+              onClick={(e) => { e.stopPropagation(); addChild() }}
+              aria-label={isSystem ? `Add container to ${data.name}` : `Add component to ${data.name}`}
+            >
+              <Plus size={11} aria-hidden="true" />
+            </button>
+            <button
+              className="c4-node-action-btn nodrag"
+              style={{ marginTop: 1 }}
+              onClick={(e) => { e.stopPropagation(); collapseElement(data.elementId!) }}
+              aria-label={`Collapse ${data.name}`}
+            >
+              <Minimize2 size={11} aria-hidden="true" />
+            </button>
+          </>
         )}
       </div>
       <div

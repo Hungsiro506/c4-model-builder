@@ -142,8 +142,8 @@ export interface WorkspaceState extends UndoState {
   // Element CRUD
   addPerson: (name: string, position?: { x: number; y: number }, location?: 'Internal' | 'External') => string
   addSoftwareSystem: (name: string, position?: { x: number; y: number }, location?: 'Internal' | 'External') => string
-  addContainer: (systemId: string, name: string, position?: { x: number; y: number }, extraTag?: string) => string
-  addComponent: (containerId: string, name: string, position?: { x: number; y: number }) => string
+  addContainer: (systemId: string, name: string, position?: { x: number; y: number }, extraTag?: string, opts?: { skipActiveView?: boolean }) => string
+  addComponent: (containerId: string, name: string, position?: { x: number; y: number }, opts?: { skipActiveView?: boolean }) => string
   updateElement: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified' }) => void
   /** Same as updateElement but does NOT push an undo entry — for live typing previews */
   updateElementLive: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified', technology?: string }) => void

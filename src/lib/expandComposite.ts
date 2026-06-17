@@ -22,6 +22,11 @@ const PAD_X = 40
 const PAD_TOP = 88
 const PAD_BOTTOM = 40
 
+// Footprint reserved for an expanded element with no children yet. Big enough to
+// hold the empty-boundary header + "add child" affordance comfortably.
+export const EMPTY_EXPAND_W = 360
+export const EMPTY_EXPAND_H = 220
+
 export interface ExpandContext extends ContentNodeContext {
   expandedIds: Set<string>
   direction: string
@@ -145,8 +150,17 @@ export function expandComposite(baseNodes: Node[], ctx: ExpandContext): ExpandRe
     }
     const subtree = layoutSubtree(element, ctx)
     if (subtree.nodes.length === 0) {
-      // Nothing to expand into — keep the collapsed node.
-      result.push(node)
+      // Nothing to expand into yet (a childless element the user just expanded
+      // to start adding children). Keep the node in the graph so its position
+      // survives overlay rebuilds, but hide it: an empty expand boundary is
+      // drawn over its footprint instead (with an "add child" affordance).
+      result.push({ ...node, hidden: true })
+      growth.push({
+        expandedId: node.id,
+        position: node.position,
+        width: EMPTY_EXPAND_W,
+        height: EMPTY_EXPAND_H,
+      })
       continue
     }
     result.push(...shiftNodes(subtree.nodes, node.position.x, node.position.y))

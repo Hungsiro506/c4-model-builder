@@ -77,7 +77,7 @@ export const createElementSlice: StateCreator<
     return id
   },
 
-  addContainer: (systemId, name, position, extraTag) => {
+  addContainer: (systemId, name, position, extraTag, opts) => {
     const id = nanoid(8)
     let added = false
     set((s) => {
@@ -89,7 +89,11 @@ export const createElementSlice: StateCreator<
       const tags = extraTag ? ['Element', 'Container', extraTag] : ['Element', 'Container']
       const container: Container = { id, type: 'container', name: uniqueElementName(name, ws), tags, properties: {}, components: [] }
       system.containers.push(container)
-      addToCurrentView(ws, s.activeViewKey, id, position)
+      // Expand-in-place adds skip the active view: the child is shown via its
+      // parent's expansion (model-driven), so adding it to e.g. a landscape view
+      // would both double-render it while expanded and leave a stray top-level
+      // node after collapse.
+      if (!opts?.skipActiveView) addToCurrentView(ws, s.activeViewKey, id, position)
       // Also auto-add to all other container views scoped to the same system
       for (const v of ws.views.containerViews) {
         if (v.softwareSystemId === systemId && v.key !== s.activeViewKey) {
@@ -109,7 +113,7 @@ export const createElementSlice: StateCreator<
     return id
   },
 
-  addComponent: (containerId, name, position) => {
+  addComponent: (containerId, name, position, opts) => {
     const id = nanoid(8)
     let added = false
     set((s) => {
@@ -121,7 +125,8 @@ export const createElementSlice: StateCreator<
         pushUndoSnapshot(s)
         const comp: Component = { id, type: 'component', name: uniqueElementName(name, ws), tags: ['Element', 'Component'], properties: {} }
         container.components.push(comp)
-        addToCurrentView(ws, s.activeViewKey, id, position)
+        // See addContainer: in-place adds render via parent expansion.
+        if (!opts?.skipActiveView) addToCurrentView(ws, s.activeViewKey, id, position)
         // Also auto-add to all other component views scoped to the same container
         for (const v of ws.views.componentViews) {
           if (v.containerId === containerId && v.key !== s.activeViewKey) {
