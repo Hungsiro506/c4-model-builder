@@ -63,6 +63,12 @@ if (import.meta.env.DEV) {
       default: throw new Error(`Unknown template: ${name}`)
     }
   }
+  ;(window as unknown as Record<string, unknown>).__testExpand = (elementId: string) => {
+    useWorkspaceStore.getState().expandElement(elementId)
+  }
+  ;(window as unknown as Record<string, unknown>).__testCollapse = (elementId: string) => {
+    useWorkspaceStore.getState().collapseElement(elementId)
+  }
   ;(window as unknown as Record<string, unknown>).__testListViews = () => {
     const ws = useWorkspaceStore.getState().workspace
     if (!ws) return []

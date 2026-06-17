@@ -31,12 +31,13 @@ function clearHighlightFiltersWithStash(s: WorkspaceState): boolean {
  *  pending zoom-confirm prompt, and a transient focusElementId that the
  *  canvas consumes to pan to a freshly-created element. */
 export type NavigationSlice = Pick<WorkspaceState,
-  | 'activeViewKey' | 'viewHistory'
+  | 'activeViewKey' | 'viewHistory' | 'expandedElementIds'
   | 'pendingZoomConfirm' | 'createViewDefaults'
   | 'focusElementId' | 'clearFocusElement'
   | 'setActiveView' | 'drillInto' | 'zoomInto'
   | 'confirmZoomCreate' | 'cancelZoomConfirm' | 'openCreateViewFromZoom'
   | 'setCreateViewDefaults' | 'navigateBack'
+  | 'expandElement' | 'collapseElement' | 'toggleExpand'
 >
 
 export const createNavigationSlice: StateCreator<
@@ -47,6 +48,7 @@ export const createNavigationSlice: StateCreator<
 > = (set, get) => ({
   activeViewKey: null,
   viewHistory: [],
+  expandedElementIds: [],
   pendingZoomConfirm: null,
   createViewDefaults: null,
   focusElementId: null,
@@ -59,6 +61,7 @@ export const createNavigationSlice: StateCreator<
     s.selectedElementIds = []
     s.selectedRelationshipId = null
     s.selectedGroupId = null
+    if (changed) s.expandedElementIds = []
     if (changed && clearHighlightFiltersWithStash(s)) {
       announce('Highlighter cleared on view change')
     }
@@ -74,6 +77,7 @@ export const createNavigationSlice: StateCreator<
     if (childView.key === s.activeViewKey) return
     s.viewHistory.push(s.activeViewKey)
     s.activeViewKey = childView.key
+    s.expandedElementIds = []
     s.selectedElementIds = []
     s.selectedRelationshipId = null
     s.selectedGroupId = null
@@ -137,6 +141,7 @@ export const createNavigationSlice: StateCreator<
     if (s.viewHistory.length === 0) return
     const previous = s.viewHistory.pop()!
     s.activeViewKey = previous
+    s.expandedElementIds = []
     s.selectedElementIds = []
     s.selectedRelationshipId = null
     s.selectedGroupId = null
@@ -144,4 +149,21 @@ export const createNavigationSlice: StateCreator<
       announce('Highlighter cleared on view change')
     }
   }),
+
+  expandElement: (elementId) => set((s) => {
+    if (!s.expandedElementIds.includes(elementId)) {
+      s.expandedElementIds.push(elementId)
+    }
+  }),
+
+  collapseElement: (elementId) => set((s) => {
+    // Collapse the element and any of its descendants that were also expanded.
+    s.expandedElementIds = s.expandedElementIds.filter((id) => id !== elementId)
+  }),
+
+  toggleExpand: (elementId) => {
+    const expanded = get().expandedElementIds.includes(elementId)
+    if (expanded) get().collapseElement(elementId)
+    else get().expandElement(elementId)
+  },
 })

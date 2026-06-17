@@ -46,6 +46,11 @@ export interface WorkspaceState extends UndoState {
   activeViewKey: string | null
   viewHistory: string[]
 
+  // Expand-in-place (semantic zoom): element ids expanded inline on the canvas.
+  // Distinct from drillInto (which swaps views) — these stay in the same view and
+  // reveal children in place. Order is insertion order so nested expands compose.
+  expandedElementIds: string[]
+
   // Selection
   selectedElementIds: string[]
   selectedRelationshipId: string | null
@@ -122,6 +127,11 @@ export interface WorkspaceState extends UndoState {
   openCreateViewFromZoom: () => void
   setCreateViewDefaults: (defaults: { type: ViewType; scopeId?: string } | null) => void
   navigateBack: () => void
+
+  // Expand-in-place
+  expandElement: (elementId: string) => void
+  collapseElement: (elementId: string) => void
+  toggleExpand: (elementId: string) => void
 
   // Selection
   selectElements: (ids: string[]) => void
