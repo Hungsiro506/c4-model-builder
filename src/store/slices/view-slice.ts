@@ -13,7 +13,7 @@ import { getFirstViewKey, getFocalScopeId } from '../workspace-selectors'
 export type ViewSlice = Pick<WorkspaceState,
   | 'addView' | 'deleteView' | 'renameView' | 'duplicateView'
   | 'toggleElementInView' | 'removeElementsFromView' | 'setLayoutDirection' | 'resetAndRelayout'
-  | 'updateNodePosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
+  | 'updateNodePosition' | 'updateExpandedChildPosition' | 'updateNodePositions' | 'syncAutoLayoutPositions'
   | 'layoutVersion'
 >
 
@@ -135,6 +135,24 @@ export const createViewSlice: StateCreator<
       return
     }
     // Don't push undo for every drag position — too noisy
+  }),
+
+  updateExpandedChildPosition: (nodeId, x, y) => set((s) => {
+    if (!s.workspace || !s.activeViewKey) return
+    for (const key of VIEW_ARRAY_KEYS) {
+      const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
+      if (!view) continue
+      const layout = view.expandedLayout ?? []
+      const existing = layout.find(e => e.id === nodeId)
+      if (existing) {
+        existing.x = x
+        existing.y = y
+      } else {
+        layout.push({ id: nodeId, x, y })
+      }
+      view.expandedLayout = layout
+      return
+    }
   }),
 
   updateNodePositions: (updates) => set((s) => {

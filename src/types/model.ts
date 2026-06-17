@@ -104,6 +104,10 @@ export interface View {
   elements: ElementInView[]
   relationships: RelationshipInView[]
   autoLayout?: AutoLayout
+  /** Absolute positions of expand-in-place children the user has dragged.
+   *  View-scoped, sidecar-persisted, never serialized to DSL. Keyed by the
+   *  child element id (NOT the wrapper boundary node id). */
+  expandedLayout?: ElementInView[]
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────

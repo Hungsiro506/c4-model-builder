@@ -169,6 +169,10 @@ export interface WorkspaceState extends UndoState {
   renameView: (key: string, title: string) => void
   duplicateView: (key: string) => string
   updateNodePosition: (nodeId: string, x: number, y: number) => void
+  /** Persist the absolute position of a dragged expand-in-place child into the
+   *  active view's expandedLayout (sidecar-backed). Expanded children are not in
+   *  view.elements, so updateNodePosition is a no-op for them. */
+  updateExpandedChildPosition: (nodeId: string, x: number, y: number) => void
   updateNodePositions: (updates: { id: string; x: number; y: number }[]) => void
   /** Fill in saved x/y for view elements that don't yet have positions. Used
    *  by Canvas to canonicalize the initial dagre layout so subsequent adds

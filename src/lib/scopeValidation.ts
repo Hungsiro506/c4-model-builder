@@ -25,15 +25,6 @@ export function validateScope(workspace: Workspace): ScopeViolation[] {
         })
       }
     }
-    if (scope === 'softwaresystem') {
-      const systemsWithContainers = systems.filter(s => (s.containers ?? []).length > 0)
-      if (systemsWithContainers.length > 1) {
-        violations.push({
-          type: 'error',
-          message: `System Context views can show multiple software systems, but a software-system scoped workspace can define container/component internals for only one of them. Found internals for ${systemsWithContainers.length}: ${systemsWithContainers.map(s => s.name).join(', ')}. Split those internals into separate workspaces, or use an unscoped workspace.`,
-        })
-      }
-    }
   }
 
   // Per-element rules — these carry elementId / relationshipId so the canvas

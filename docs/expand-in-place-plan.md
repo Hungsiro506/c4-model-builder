@@ -92,3 +92,40 @@ state is layout metadata, so it rides the sidecar like positions/viewport.
 - Deep nesting visuals (component inside container inside system) may get cramped.
 - Database container: expand to show tables (inline chips) + separate ER view — separate
   feature, not in this plan.
+
+## Progress log
+
+### 2026-06-17 — cross-level guard, edge fixes, move-while-expanded
+
+- **Cross-level connection guard** (`src/lib/connectionValidation.ts`): block drawing a
+  relationship between endpoints at different C4 levels (e.g. a container shown via
+  expand-in-place dragged onto a top-level system). `elementLevel` (person/system=0,
+  container=1, component=2); `canConnectElements` strips the `__expand_boundary__` prefix
+  and requires equal levels. Wired into `Canvas.isValidConnection` + `onConnect`/`onReconnect`
+  backstops. Equal-level connections are intentionally allowed (by design).
+- **Gemini review fixes**: `collapseElement` now also drops expanded descendants from
+  `expandedElementIds` (no stale resurfacing on re-expand); expand-boundary `zIndex` is
+  `-5 + depth` so nested boxes stack correctly.
+- **Edge level-equalization** (`buildCompositeEdges`): an equal-level child→child relationship
+  (e.g. `a1→b1`) folds the deeper side up when only one parent is expanded, so it renders as
+  `A→B-wrapper` instead of a broken cross-level `A→b1`. Both expanded → finest `a1→b1` stays.
+- **Move while expanded** (long-term, sidecar-persisted):
+  - `View.expandedLayout?: ElementInView[]` — absolute positions of dragged expand-in-place
+    children. View-scoped, persisted in the sidecar, never serialized to the DSL.
+  - `sidecar.ts`: `SidecarView.expanded` (+ guard); extract from / apply to `view.expandedLayout`.
+  - `view-slice.ts`: `updateExpandedChildPosition(nodeId, x, y)` upserts into the active view's
+    `expandedLayout` (expanded children aren't in `view.elements`, so `updateNodePosition`
+    no-ops for them).
+  - `Canvas.tsx`: after `expandComposite`, saved positions override the recomputed subtree
+    layout; `onNodeDragStop` routes expanded-child drags to the new action via
+    `isExpandedChildNode`.
+  - **Drag the whole expanded box**: the populated expand boundary is now `draggable` via its
+    `.c4-overlay-drag-handle` header; `onNodeDragStart` collects the visible descendants
+    (`getExpandBoundaryMemberIds`) and translates them as a unit, persisting each via
+    `updateExpandedChildPosition`.
+  - Resolves the "manual positions × expand state" open item above for the drag case.
+- **Scope validation**: removed the software-system-scope "internals for only one system" error
+  — multiple systems may define internals in a single workspace.
+- Tests: unit `connectionValidation`, `sidecar` (expandedLayout round-trip), `scopeValidation`;
+  E2E `cross-level-connection`, `edge-retarget`, `move-while-expanded` (child drag + box drag,
+  both surviving collapse/re-expand). Full suite green (1128 unit, 20 expand-in-place E2E).

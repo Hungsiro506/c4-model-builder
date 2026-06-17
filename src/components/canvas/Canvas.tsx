@@ -98,6 +98,30 @@ function getBoundaryMemberIds(workspace: Workspace | null | undefined, view: Vie
   return memberIds
 }
 
+/** Visible descendant element ids of an expand-in-place parent (system →
+ *  containers + their components; container → its components). Used to drag an
+ *  expanded box as a unit. */
+function getExpandBoundaryMemberIds(workspace: Workspace | null | undefined, elementId: string): Set<string> {
+  const ids = new Set<string>()
+  if (!workspace) return ids
+  for (const sys of workspace.model.softwareSystems) {
+    if (sys.id === elementId) {
+      for (const c of sys.containers) {
+        ids.add(c.id)
+        for (const comp of c.components) ids.add(comp.id)
+      }
+      return ids
+    }
+    for (const c of sys.containers) {
+      if (c.id === elementId) {
+        for (const comp of c.components) ids.add(comp.id)
+        return ids
+      }
+    }
+  }
+  return ids
+}
+
 function getNestedGroupNodeIds(workspace: Workspace | null | undefined, memberIds: Set<string>, draggedNodeId: string): Set<string> {
   const nestedGroupIds = new Set<string>()
   if (!workspace || memberIds.size === 0) return nestedGroupIds
@@ -113,6 +137,19 @@ function getNestedGroupNodeIds(workspace: Workspace | null | undefined, memberId
 
 function isOverlayNode(node: Pick<Node, 'id' | 'type'>): boolean {
   return node.type === 'group' || node.type === 'boundary' || node.id.startsWith('group-') || isScopeBoundaryNode(node)
+}
+
+/** A content node revealed by expand-in-place: it carries a model element but is
+ *  NOT one of the view's own elements (those are the top-level/collapsed nodes).
+ *  Only meaningful while something is expanded. */
+function isExpandedChildNode(
+  node: Node,
+  view: View | null | undefined,
+  expandedIds: string[],
+): boolean {
+  if (expandedIds.length === 0 || isOverlayNode(node)) return false
+  if (!node.data || !('element' in node.data)) return false
+  return !(view?.elements.some((e) => e.id === node.id) ?? false)
 }
 
 function nodeNumberStyle(node: Node, key: 'width' | 'height'): number | undefined {
@@ -182,6 +219,7 @@ export default function Canvas() {
   const storeSelectedRelationshipId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const storeSelectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
   const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
+  const updateExpandedChildPosition = useWorkspaceStore((s) => s.updateExpandedChildPosition)
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const syncAutoLayoutPositions = useWorkspaceStore((s) => s.syncAutoLayoutPositions)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
@@ -402,6 +440,19 @@ export default function Canvas() {
       )
       const shiftedLaidOut = laidOut.map((n) => ({ ...n, position: shiftedById.get(n.id) ?? n.position }))
       expandedNodes = expandComposite(shiftedLaidOut, expandCtx).nodes
+
+      // Override expanded-child positions the user has manually dragged. These
+      // ride in view.expandedLayout (sidecar-persisted) as absolute coords and
+      // must win over the recomputed subtree layout.
+      const savedExpanded = new Map((view.expandedLayout ?? []).map((e) => [e.id, e]))
+      if (savedExpanded.size > 0) {
+        expandedNodes = expandedNodes.map((n) => {
+          const saved = savedExpanded.get(n.id)
+          return saved && saved.x !== undefined && saved.y !== undefined
+            ? { ...n, position: { x: saved.x, y: saved.y } }
+            : n
+        })
+      }
     }
 
     // 4. Build group background nodes and scope boundary using post-layout positions
@@ -758,11 +809,15 @@ export default function Canvas() {
     nodeStart: { x: number; y: number }
     memberStart: Map<string, { x: number; y: number }>
     persistedMemberIds: Set<string>
+    /** When true, members are expand-in-place children — persist their absolute
+     *  positions into view.expandedLayout, not view.elements. */
+    expandedChildren: boolean
   } | null>(null)
 
   const onNodeDragStart = useCallback((_event: MouseEvent | TouchEvent, node: Node) => {
     isDragging.current = false
     let memberSet: Set<string> | null = null
+    let expandedChildren = false
 
     if (node.id.startsWith('group-')) {
       const groupId = node.id.slice(6)
@@ -770,6 +825,10 @@ export default function Canvas() {
       const group = ws?.model.groups.find((g) => g.id === groupId)
       if (!group) { overlayDragRef.current = null; return }
       memberSet = new Set(group.elementIds)
+    } else if (node.id.startsWith(EXPAND_BOUNDARY_PREFIX)) {
+      const elementId = node.id.slice(EXPAND_BOUNDARY_PREFIX.length)
+      memberSet = getExpandBoundaryMemberIds(workspaceRef.current, elementId)
+      expandedChildren = true
     } else if (isScopeBoundaryNode(node)) {
       memberSet = getBoundaryMemberIds(workspaceRef.current, viewRef.current, node.id)
     } else {
@@ -792,6 +851,7 @@ export default function Canvas() {
       nodeStart: { x: node.position.x, y: node.position.y },
       memberStart,
       persistedMemberIds,
+      expandedChildren,
     }
   }, [reactFlowInstance])
 
@@ -1019,11 +1079,23 @@ export default function Canvas() {
           if (!ctx.persistedMemberIds.has(id)) continue
           updates.push({ id, x: start.x + dx, y: start.y + dy })
         }
-        if (updates.length > 0) updateNodePositions(updates)
+        if (updates.length > 0) {
+          if (ctx.expandedChildren) {
+            // Moving an expanded box: members are expand-in-place children.
+            for (const u of updates) updateExpandedChildPosition(u.id, u.x, u.y)
+          } else {
+            updateNodePositions(updates)
+          }
+        }
         shouldRebuildOverlays = updates.length > 0
         overlayDragRef.current = null
       } else if (isScopeBoundaryNode(node)) {
         shouldRebuildOverlays = false
+      } else if (isExpandedChildNode(node, viewRef.current, expandedIdsRef.current)) {
+        // Expand-in-place children aren't in view.elements, so updateNodePosition
+        // would silently no-op (and the drag would snap back on rebuild). Persist
+        // their absolute position into view.expandedLayout instead.
+        updateExpandedChildPosition(node.id, node.position.x, node.position.y)
       } else {
         updateNodePosition(node.id, node.position.x, node.position.y)
       }
@@ -1039,7 +1111,7 @@ export default function Canvas() {
       // Reset drag flag slightly after stop so any trailing onSelectionChange is still suppressed
       setTimeout(() => { isDragging.current = false }, 50)
     },
-    [updateNodePosition, updateNodePositions, setNodes],
+    [updateNodePosition, updateExpandedChildPosition, updateNodePositions, setNodes],
   )
 
 

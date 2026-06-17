@@ -770,7 +770,11 @@ export function buildExpandBoundaryNodes(
       // Deeper boxes sit above their parent box but still behind content (>= 0).
       zIndex: -5 + depthOf(expandedId),
       selectable: false,
-      draggable: false,
+      // Draggable via the header handle only (body is pointer-transparent so
+      // child content nodes stay interactive). Dragging translates the whole
+      // expanded subtree — Canvas.onNodeDragStart wires the members.
+      draggable: true,
+      dragHandle: '.c4-overlay-drag-handle',
       focusable: false,
     })
   }
