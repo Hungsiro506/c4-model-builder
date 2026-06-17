@@ -157,8 +157,27 @@ export const createNavigationSlice: StateCreator<
   }),
 
   collapseElement: (elementId) => set((s) => {
-    // Collapse the element and any of its descendants that were also expanded.
-    s.expandedElementIds = s.expandedElementIds.filter((id) => id !== elementId)
+    if (!s.workspace) return
+    // Collapse the element and any of its descendants that were also expanded —
+    // otherwise a child left in expandedElementIds resurfaces stale when the
+    // parent is re-expanded.
+    const descendants = new Set<string>()
+    for (const sys of s.workspace.model.softwareSystems) {
+      if (sys.id === elementId) {
+        for (const c of sys.containers) {
+          descendants.add(c.id)
+          for (const comp of c.components) descendants.add(comp.id)
+        }
+      }
+      for (const c of sys.containers) {
+        if (c.id === elementId) {
+          for (const comp of c.components) descendants.add(comp.id)
+        }
+      }
+    }
+    s.expandedElementIds = s.expandedElementIds.filter(
+      (id) => id !== elementId && !descendants.has(id),
+    )
   }),
 
   toggleExpand: (elementId) => {
