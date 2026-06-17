@@ -64,13 +64,70 @@ function getRelationshipStyle(
 }
 
 /** Get child count for drill-down hint. External systems are opaque and excluded. */
-function getChildCount(element: ModelElement): number | undefined {
+export function getChildCount(element: ModelElement): number | undefined {
   if (element.type === 'softwareSystem') {
     if (element.location === 'External') return undefined
     return element.containers.length
   }
   if (element.type === 'container') return element.components.length
   return undefined
+}
+
+/** Direct children of an element for expand-in-place: containers of a system,
+ *  components of a container. People/components have none. */
+export function getChildElements(element: ModelElement): ModelElement[] {
+  if (element.type === 'softwareSystem') return element.containers
+  if (element.type === 'container') return element.components
+  return []
+}
+
+/** Build the tag→style index for a workspace (theme styles as base layer,
+ *  custom workspace styles override). Exported so expand-in-place can color
+ *  child nodes identically to the top-level pass. */
+export function buildElementStyleIndex(
+  workspace: Workspace,
+  themeStyles: ElementStyle[],
+): Map<string, ElementStyle> {
+  const workspaceStyles = workspace.views.configuration.styles.elements
+    .map(stripThemeManagedStyleFields)
+    .filter((style): style is ElementStyle => style !== null)
+  return buildStyleIndex([...themeStyles, ...workspaceStyles])
+}
+
+export interface ContentNodeContext {
+  styleIndex: Map<string, ElementStyle>
+  active: boolean
+  filters: HighlightFilters
+  drillableIds: Set<string>
+  onDrillIn: (elementId: string) => void
+  viewCountMap: Map<string, number>
+}
+
+/** Build a single React Flow content node for an element at a given position.
+ *  Shared by buildNodes (top-level) and the expand-in-place composite builder
+ *  so colors, drill hints, and highlight classes stay consistent. */
+export function buildContentNode(
+  element: ModelElement,
+  position: { x: number; y: number },
+  ctx: ContentNodeContext,
+): Node {
+  const style = getElementStyle(element, ctx.styleIndex)
+  const highlighted = ctx.active && isHighlighted(element, ctx.filters)
+  return {
+    id: element.id,
+    type: element.type,
+    position,
+    data: {
+      element,
+      style,
+      childCount: getChildCount(element),
+      canDrill: ctx.drillableIds.has(element.id),
+      onDrillIn: ctx.onDrillIn,
+      highlighted,
+      viewCount: ctx.viewCountMap.get(element.id) ?? 1,
+    },
+    className: ctx.active ? (highlighted ? 'c4-node-highlighted' : 'c4-node-faded') : undefined,
+  }
 }
 
 /** Pick the best source/target handle sides based on relative node positions.
@@ -154,40 +211,16 @@ export function buildNodes(
   // Theme styles form the base layer. Truly custom workspace styles still
   // override them, but colors copied from our bundled palettes stay
   // theme-managed so switching themes updates node fills consistently.
-  const workspaceStyles = workspace.views.configuration.styles.elements
-    .map(stripThemeManagedStyleFields)
-    .filter((style): style is ElementStyle => style !== null)
-  const styleIndex = buildStyleIndex([...themeStyles, ...workspaceStyles])
+  const styleIndex = buildElementStyleIndex(workspace, themeStyles)
 
   const active = highlightActive(filters)
+  const ctx: ContentNodeContext = { styleIndex, active, filters, drillableIds, onDrillIn, viewCountMap }
   const nodes: Node[] = []
 
   for (const viewEl of view.elements) {
     const element = elementMap.get(viewEl.id)
     if (!element) continue
-
-    const style = getElementStyle(element, styleIndex)
-    const highlighted = active && isHighlighted(element, filters)
-    const pos = { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }
-
-    nodes.push({
-      id: element.id,
-      type: element.type,
-      position: pos,
-      data: {
-        element,
-        style,
-        childCount: getChildCount(element),
-        canDrill: drillableIds.has(element.id),
-        onDrillIn,
-        highlighted,
-        viewCount: viewCountMap.get(element.id) ?? 1,
-      },
-      // Highlighter focus mode: matched nodes get the highlighted ring; the rest
-      // fade to ghost context. When no facets are active, every node renders
-      // normally (no class either way).
-      className: active ? (highlighted ? 'c4-node-highlighted' : 'c4-node-faded') : undefined,
-    })
+    nodes.push(buildContentNode(element, { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }, ctx))
   }
 
   return nodes

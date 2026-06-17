@@ -25,6 +25,29 @@ async function isNodeVisible(page: Page, id: string): Promise<boolean> {
   return (await page.locator(`.react-flow__node[data-id="${id}"]`).count()) > 0
 }
 
+// parseAndLoad only waits for the canvas to appear, not for the initial
+// fit-to-view to settle. Wait until the viewport transform stops changing so
+// position assertions compare against a stable (already-fitted) baseline.
+async function waitForViewportSettle(page: Page) {
+  await page.locator('.react-flow__viewport').evaluate((el) =>
+    new Promise<void>((resolve) => {
+      let stableFrames = 0
+      let last = (el as HTMLElement).style.transform
+      const check = () => {
+        const cur = (el as HTMLElement).style.transform
+        if (cur === last) {
+          if (++stableFrames >= 3) { resolve(); return }
+        } else {
+          stableFrames = 0
+          last = cur
+        }
+        requestAnimationFrame(check)
+      }
+      requestAnimationFrame(check)
+    }),
+  )
+}
+
 // Expand-in-place test hooks. Added in Stage 2; until then these are no-ops and
 // the expand assertions stay red (TDD north star).
 async function expandNode(page: Page, id: string) {
@@ -44,6 +67,7 @@ async function collapseNode(page: Page, id: string) {
 test.describe('Expand-in-place (semantic zoom)', () => {
   test.beforeEach(async ({ workspace }) => {
     await workspace.parseAndLoad(axonDsl)
+    await waitForViewportSettle(workspace.page)
   })
 
   // ── Verify existing support (should pass at Stage 0) ──────────────────

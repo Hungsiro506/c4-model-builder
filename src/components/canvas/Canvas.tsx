@@ -39,7 +39,10 @@ import {
   buildBoundaryNodes,
   buildDrillableSet,
   buildBoundaryLayoutClusters,
+  buildElementStyleIndex,
 } from './canvasBuilders'
+import { highlightActive } from '@/lib/highlight'
+import { expandComposite } from '@/lib/expandComposite'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -163,6 +166,7 @@ const MARKER_SVG_STYLE: React.CSSProperties = { position: 'absolute', width: 0, 
 export default function Canvas() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const expandedElementIds = useWorkspaceStore((s) => s.expandedElementIds)
   const selectElements = useWorkspaceStore((s) => s.selectElements)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
@@ -356,17 +360,33 @@ export default function Canvas() {
     const boundaryInternalIds = new Set(boundaryClusters.find((cluster) => cluster.id === focalBoundaryId)?.elementIds ?? [])
     const laidOut = applyAutoLayout(layoutNodes, tempEdges, view, workspace.model.groups, direction, boundaryInternalIds, boundaryClusters)
 
+    // 3b. Expand-in-place: replace expanded top-level nodes with their children,
+    //     laid out inside the footprint the collapsed node occupied.
+    const expandedNodes = expandedElementIds.length > 0
+      ? expandComposite(laidOut, {
+          expandedIds: new Set(expandedElementIds),
+          direction,
+          relationships: workspace.model.relationships,
+          styleIndex: buildElementStyleIndex(workspace, themeStyles),
+          active: highlightActive(highlightFilters),
+          filters: highlightFilters,
+          drillableIds,
+          onDrillIn: stableDrillInto,
+          viewCountMap,
+        }).nodes
+      : laidOut
+
     // 4. Build group background nodes and scope boundary using post-layout positions
-    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut, boundaryClusters)
-    const boundaryNodes = buildBoundaryNodes(workspace, view, laidOut, groupNodes)
+    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, expandedNodes, boundaryClusters)
+    const boundaryNodes = buildBoundaryNodes(workspace, view, expandedNodes, groupNodes)
     const overlayNodes = [...boundaryNodes, ...groupNodes]
-    const allNodes = [...overlayNodes, ...laidOut]
+    const allNodes = [...overlayNodes, ...expandedNodes]
 
     // 5. Build final edges using post-layout positions for handle routing
     const edges = buildEdges(workspace, view, allNodes, highlightFilters)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.
@@ -532,7 +552,7 @@ export default function Canvas() {
   }, [])
 
   useEffect(() => {
-    const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}`
+    const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}:${expandedElementIds.join(',')}`
     if (signal !== lastStructuralSignal.current) {
       const prevSignal = lastStructuralSignal.current
       lastStructuralSignal.current = signal
