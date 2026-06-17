@@ -691,17 +691,29 @@ export function buildExpandBoundaryNodes(
     return false
   }
 
+  // Compute deepest-first so an outer (e.g. system) boundary can wrap the inner
+  // (e.g. container) boundary box — not just the leaf content nodes. Both boxes
+  // wrap the same descendants, so without nesting they'd come out identical and
+  // overlap exactly. Including the inner boundary rect makes each parent box
+  // strictly larger than its child by one padding ring.
+  const ordered = [...expandedIds].sort((a, b) => depthOf(b) - depthOf(a))
+  const rectById = new Map<string, OverlayRect>()
   const boundaries: Node[] = []
-  for (const expandedId of expandedIds) {
+  for (const expandedId of ordered) {
     const info = meta.get(expandedId)
     if (!info) continue
 
-    const members = contentNodes.filter((n) => ancestorIsExpanded(n.id, expandedId))
-    if (members.length === 0) continue
+    const memberRects: OverlayRect[] = contentNodes
+      .filter((n) => ancestorIsExpanded(n.id, expandedId))
+      .map((n) => nodeRect(n))
+    // Pull in the already-computed boundary boxes of any expanded descendants.
+    for (const [otherId, rect] of rectById) {
+      if (ancestorIsExpanded(otherId, expandedId)) memberRects.push(rect)
+    }
+    if (memberRects.length === 0) continue
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const n of members) {
-      const r = nodeRect(n)
+    for (const r of memberRects) {
       minX = Math.min(minX, r.x)
       minY = Math.min(minY, r.y)
       maxX = Math.max(maxX, r.x + r.w)
@@ -712,6 +724,7 @@ export function buildExpandBoundaryNodes(
     const y = minY - EB_PAD_TOP
     const w = (maxX - minX) + EB_PAD_X * 2
     const h = (maxY - minY) + EB_PAD_TOP + EB_PAD_BOTTOM
+    rectById.set(expandedId, { x, y, w, h })
     const typeLabel = info.type === 'softwareSystem' ? 'Software System'
       : info.type === 'container' ? 'Container' : 'Component'
 

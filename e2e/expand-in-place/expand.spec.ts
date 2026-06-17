@@ -197,9 +197,11 @@ test.describe('Expand-in-place (semantic zoom)', () => {
     // Components visible.
     expect(await isNodeVisible(workspace.page, 'dwApi')).toBe(true)
     expect(await isNodeVisible(workspace.page, 'dwScheduler')).toBe(true)
-    // Container box nests inside the system box.
-    expect(ctrBox!.x).toBeGreaterThanOrEqual(sysBox!.x - 1)
-    expect(ctrBox!.x + ctrBox!.width).toBeLessThanOrEqual(sysBox!.x + sysBox!.width + 1)
+    // Container box nests STRICTLY inside the system box — the two must not
+    // collapse onto the same rectangle (that overlap was the reported bug).
+    expect(ctrBox!.x).toBeGreaterThan(sysBox!.x + 4)
+    expect(ctrBox!.x + ctrBox!.width).toBeLessThan(sysBox!.x + sysBox!.width - 4)
+    expect(ctrBox!.y).toBeGreaterThan(sysBox!.y + 4)
     // The expanded container box must NOT overlap its sibling containers.
     const evt = await nodeBox(workspace.page, 'eventConductor')
     const skemata = await nodeBox(workspace.page, 'skemataDb')
