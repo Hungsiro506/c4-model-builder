@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { gapShift, gapShiftMany, axisForDirection, type LayoutNode } from './expandLayout'
+import { gapShift, gapShiftMany, gapShiftCross, gapShiftCrossRect, axisForDirection, EXPAND_MARGIN, type LayoutNode } from './expandLayout'
 
 const n = (id: string, x: number, y: number, width = 200, height = 100): LayoutNode => ({
   id, position: { x, y }, width, height,
@@ -78,6 +78,68 @@ describe('gapShiftMany (nested / multiple expands compose)', () => {
     // box1 grows 100 → box2 and tail move +100. box2 now at 300; grows 50 → tail +50.
     expect(out.find((x) => x.id === 'box2')!.position.y).toBe(300)
     expect(out.find((x) => x.id === 'tail')!.position.y).toBe(550)
+  })
+})
+
+describe('gapShiftCross — collision clear with margin', () => {
+  // primaryAxis 'y' (TB flow) → cross axis is 'x'. Box A at (0,0), grows to 500×300.
+  it('pushes a trailing-side sibling clear of the grown box + margin', () => {
+    const nodes = [n('A', 0, 0), n('B', 250, 0)] // B overlaps grown footprint on x
+    const out = gapShiftCross(nodes, 'A', 500, 300, 'y')
+    expect(out.find((x) => x.id === 'B')!.position.x).toBe(500 + EXPAND_MARGIN)
+    expect(out.find((x) => x.id === 'A')!.position.x).toBe(0)
+  })
+
+  it('pushes a leading-side sibling off the leading edge - margin', () => {
+    // Box A leading edge at x=300; B center left of box center → slides left.
+    const nodes = [n('A', 300, 0, 500, 300), n('B', 250, 0)]
+    const out = gapShiftCross(nodes, 'A', 500, 300, 'y')
+    expect(out.find((x) => x.id === 'B')!.position.x).toBe(300 - EXPAND_MARGIN - 200)
+  })
+
+  it('leaves a well-separated sibling untouched (same reference)', () => {
+    const nodes = [n('A', 0, 0), n('B', 1000, 0)]
+    const out = gapShiftCross(nodes, 'A', 500, 300, 'y')
+    expect(out.find((x) => x.id === 'B')).toBe(nodes[1])
+  })
+
+  it('clears a sibling dragged on top of the box (the reported bug)', () => {
+    const nodes = [n('A', 0, 0), n('B', 120, 20)] // B overlapping A's collapsed slot
+    const out = gapShiftCross(nodes, 'A', 500, 300, 'y')
+    const b = out.find((x) => x.id === 'B')!
+    const overlap = b.position.x < 500 && b.position.x + 200 > 0
+      && b.position.y < 300 && b.position.y + 100 > 0
+    expect(overlap).toBe(false)
+  })
+})
+
+describe('gapShiftCrossRect — push clear of the ACTUAL wrapper rect', () => {
+  // The reported bug: a child dragged outward grows the real wrapper past dagre's
+  // predicted size, so a sibling sized-off the prediction stays overlapping. The
+  // rect variant takes the true wrapper rect, so the sibling clears it fully.
+  it('pushes a sibling fully outside a rect bigger than the predicted box', () => {
+    // Real wrapper rect spans x 0..700 (a child was dragged out to ~700). Sibling
+    // B at x=480 (where dagre put it next to the *predicted* 500-wide box) still
+    // overlaps the real 700-wide wrapper.
+    const nodes = [n('B', 480, 0)]
+    const rect = { x: 0, y: 0, w: 700, h: 300 }
+    const out = gapShiftCrossRect(nodes, rect, 'y')
+    // B's center (480+100=580) is past the rect center (350) → trailing side.
+    expect(out.find((x) => x.id === 'B')!.position.x).toBe(700 + EXPAND_MARGIN)
+  })
+
+  it('honours excludeIds (a wrapper member is never pushed out of its wrapper)', () => {
+    const nodes = [n('child', 50, 50)]
+    const rect = { x: 0, y: 0, w: 700, h: 300 }
+    const out = gapShiftCrossRect(nodes, rect, 'y', new Set(['child']))
+    expect(out.find((x) => x.id === 'child')).toBe(nodes[0])
+  })
+
+  it('leaves a sibling already clear of the rect untouched (same reference)', () => {
+    const nodes = [n('B', 1000, 0)]
+    const rect = { x: 0, y: 0, w: 700, h: 300 }
+    const out = gapShiftCrossRect(nodes, rect, 'y')
+    expect(out.find((x) => x.id === 'B')).toBe(nodes[0])
   })
 })
 

@@ -648,9 +648,75 @@ export const EXPAND_BOUNDARY_PREFIX = '__expand_boundary__'
 
 // Must match the inner padding expandComposite uses so the boundary box lines
 // up with where the children were actually placed.
-const EB_PAD_X = 40
-const EB_PAD_TOP = 88
-const EB_PAD_BOTTOM = 40
+export const EB_PAD_X = 40
+export const EB_PAD_TOP = 88
+export const EB_PAD_BOTTOM = 40
+
+/** Compute the wrapper rect for each expanded element from its rendered child
+ *  content nodes (deepest-first so an outer box wraps the inner boxes, matching
+ *  the boundary nodes drawn from these rects). This is the single source of truth
+ *  for "how big is the expand wrapper" — both the rendered boundary nodes and the
+ *  sibling-collision push read it, so the push can never disagree with what the
+ *  user sees. Reflects user-dragged child positions, not dagre's predicted growth. */
+export function computeExpandBoundaryRects(
+  contentNodes: Node[],
+  expandedIds: Set<string>,
+  workspace: Workspace,
+): Map<string, OverlayRect> {
+  const rectById = new Map<string, OverlayRect>()
+  if (expandedIds.size === 0) return rectById
+
+  const parentOf = buildParentMap(workspace)
+  const depthOf = (id: string): number => {
+    let d = 0
+    let cur = parentOf.get(id)
+    while (cur !== undefined) { d++; cur = parentOf.get(cur) }
+    return d
+  }
+  const ancestorIsExpanded = (id: string, target: string): boolean => {
+    let cur = parentOf.get(id)
+    while (cur !== undefined) {
+      if (cur === target) return true
+      cur = parentOf.get(cur)
+    }
+    return false
+  }
+
+  const ownNodeById = new Map<string, Node>()
+  for (const n of contentNodes) {
+    if (expandedIds.has(n.id)) ownNodeById.set(n.id, n)
+  }
+
+  const ordered = [...expandedIds].sort((a, b) => depthOf(b) - depthOf(a))
+  for (const expandedId of ordered) {
+    const memberRects: OverlayRect[] = contentNodes
+      .filter((n) => ancestorIsExpanded(n.id, expandedId))
+      .map((n) => nodeRect(n))
+    for (const [otherId, rect] of rectById) {
+      if (ancestorIsExpanded(otherId, expandedId)) memberRects.push(rect)
+    }
+    if (memberRects.length === 0) {
+      const own = ownNodeById.get(expandedId)
+      if (!own) continue
+      rectById.set(expandedId, { x: own.position.x, y: own.position.y, w: EMPTY_EXPAND_W, h: EMPTY_EXPAND_H })
+      continue
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const r of memberRects) {
+      minX = Math.min(minX, r.x)
+      minY = Math.min(minY, r.y)
+      maxX = Math.max(maxX, r.x + r.w)
+      maxY = Math.max(maxY, r.y + r.h)
+    }
+    rectById.set(expandedId, {
+      x: minX - EB_PAD_X,
+      y: minY - EB_PAD_TOP,
+      w: (maxX - minX) + EB_PAD_X * 2,
+      h: (maxY - minY) + EB_PAD_TOP + EB_PAD_BOTTOM,
+    })
+  }
+  return rectById
+}
 
 /** Draw a boundary box around the children of each expanded element. Computed
  *  from the rendered child content nodes so it survives the overlay rebuild
@@ -692,51 +758,39 @@ export function buildExpandBoundaryNodes(
     return false
   }
 
-  // Compute deepest-first so an outer (e.g. system) boundary can wrap the inner
-  // (e.g. container) boundary box — not just the leaf content nodes. Both boxes
-  // wrap the same descendants, so without nesting they'd come out identical and
-  // overlap exactly. Including the inner boundary rect makes each parent box
-  // strictly larger than its child by one padding ring.
-  // The hidden own-node of an expanded element with no children yet (kept in the
-  // graph by expandComposite so its position survives overlay rebuilds). Used to
-  // anchor an empty boundary the user can add the first child into.
-  const ownNodeById = new Map<string, Node>()
-  for (const n of contentNodes) {
-    if (expandedIds.has(n.id)) ownNodeById.set(n.id, n)
-  }
+  // Rects deepest-first so an outer (e.g. system) boundary wraps the inner
+  // (e.g. container) box — see computeExpandBoundaryRects. Shared with the
+  // sibling-collision push so the push clears exactly what is drawn here.
+  const rectById = computeExpandBoundaryRects(contentNodes, expandedIds, workspace)
+
+  // An expanded element is "empty" (childless) when no content node descends
+  // from it and no expanded descendant contributed a rect — its rect is the
+  // EMPTY_EXPAND_W/H placeholder footprint.
+  const isEmpty = (id: string): boolean =>
+    !contentNodes.some((n) => ancestorIsExpanded(n.id, id))
+    && ![...rectById.keys()].some((o) => o !== id && ancestorIsExpanded(o, id))
 
   const ordered = [...expandedIds].sort((a, b) => depthOf(b) - depthOf(a))
-  const rectById = new Map<string, OverlayRect>()
   const boundaries: Node[] = []
   for (const expandedId of ordered) {
     const info = meta.get(expandedId)
     if (!info) continue
+    const rect = rectById.get(expandedId)
+    if (!rect) continue
 
     const typeLabel = info.type === 'softwareSystem' ? 'Software System'
       : info.type === 'container' ? 'Container' : 'Component'
 
-    const memberRects: OverlayRect[] = contentNodes
-      .filter((n) => ancestorIsExpanded(n.id, expandedId))
-      .map((n) => nodeRect(n))
-    // Pull in the already-computed boundary boxes of any expanded descendants.
-    for (const [otherId, rect] of rectById) {
-      if (ancestorIsExpanded(otherId, expandedId)) memberRects.push(rect)
-    }
-    if (memberRects.length === 0) {
-      // Expanded but childless: draw an empty boundary over the footprint its
-      // hidden own-node occupies, with an "add child" affordance + collapse.
-      const own = ownNodeById.get(expandedId)
-      if (!own) continue
-      // Match the footprint gap-shift reserved (EMPTY_EXPAND_W/H), anchored at
-      // the hidden node's leading corner, so the boundary fills that gap exactly.
-      const r: OverlayRect = { x: own.position.x, y: own.position.y, w: EMPTY_EXPAND_W, h: EMPTY_EXPAND_H }
-      rectById.set(expandedId, r)
+    const { x, y, w, h } = rect
+    if (isEmpty(expandedId)) {
+      // Expanded but childless: an empty boundary over the placeholder footprint,
+      // with an "add child" affordance + collapse.
       boundaries.push({
         id: `${EXPAND_BOUNDARY_PREFIX}${expandedId}`,
         type: 'boundary',
-        position: { x: r.x, y: r.y },
-        measured: { width: r.w, height: r.h },
-        style: { width: r.w, height: r.h, pointerEvents: 'none' },
+        position: { x, y },
+        measured: { width: w, height: h },
+        style: { width: w, height: h, pointerEvents: 'none' },
         data: { name: info.name, typeLabel, empty: true, collapsible: true, elementId: expandedId },
         zIndex: -5 + depthOf(expandedId),
         selectable: false,
@@ -745,20 +799,6 @@ export function buildExpandBoundaryNodes(
       })
       continue
     }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const r of memberRects) {
-      minX = Math.min(minX, r.x)
-      minY = Math.min(minY, r.y)
-      maxX = Math.max(maxX, r.x + r.w)
-      maxY = Math.max(maxY, r.y + r.h)
-    }
-
-    const x = minX - EB_PAD_X
-    const y = minY - EB_PAD_TOP
-    const w = (maxX - minX) + EB_PAD_X * 2
-    const h = (maxY - minY) + EB_PAD_TOP + EB_PAD_BOTTOM
-    rectById.set(expandedId, { x, y, w, h })
 
     boundaries.push({
       id: `${EXPAND_BOUNDARY_PREFIX}${expandedId}`,
@@ -813,7 +853,7 @@ export function buildEdges(
 
 /** Build a child→parent id map for the whole model (container→system,
  *  component→container). People and systems have no parent. */
-function buildParentMap(workspace: Workspace): Map<string, string> {
+export function buildParentMap(workspace: Workspace): Map<string, string> {
   const parentOf = new Map<string, string>()
   for (const sys of workspace.model.softwareSystems) {
     for (const container of sys.containers) {

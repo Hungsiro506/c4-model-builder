@@ -15,6 +15,10 @@ export type LayoutNode = {
 
 export type ShiftAxis = 'x' | 'y'
 
+/** Breathing room left between an expanded box and the siblings pushed clear of
+ *  it, so a grown box never sits flush against its neighbours. */
+export const EXPAND_MARGIN = 60
+
 /** Axis a given dagre direction grows along. LR/RL flow horizontally (x),
  *  TB/BT flow vertically (y). */
 export function axisForDirection(direction: string): ShiftAxis {
@@ -50,51 +54,86 @@ export function gapShift<T extends LayoutNode>(
   })
 }
 
-/** Push siblings off the *cross* axis (perpendicular to the dagre flow) when an
- *  expanded box grows into them. Same-rank siblings sit beside the box on the
- *  cross axis; the flow-axis `gapShift` never touches them, so a box that grows
- *  wider/taller on the cross axis would overlap them.
+/** Push siblings clear of an expanded box's *grown* footprint.
  *
- *  Gated by primary-axis overlap so only siblings the grown box actually reaches
- *  are moved — a node in a different rank (already spaced by the flow-axis shift)
- *  stays put. Only trailing-side neighbours move (the box grows from its fixed
- *  leading corner toward the trailing edge). */
+ *  The flow-axis `gapShift` only opens space along the dagre flow; a box that
+ *  also grows on the cross axis (or a sibling the user has dragged near/onto the
+ *  box) can still overlap the grown rect. This is a collision-resolution pass: any
+ *  non-member node that overlaps the grown box on BOTH axes is pushed out along
+ *  the cross axis by the *minimum* distance to clear, toward whichever side it is
+ *  nearer to. Nodes that don't overlap (e.g. a well-spaced sibling in another
+ *  rank) are returned untouched, so this never disturbs far neighbours.
+ *
+ *  The box grows from its fixed leading corner, so its rect is `box.position`
+ *  plus the grown width/height. */
 export function gapShiftCross<T extends LayoutNode>(
   nodes: T[],
   expandedId: string,
-  crossDelta: number,
+  grownWidth: number,
+  grownHeight: number,
   primaryAxis: ShiftAxis,
-  grownPrimary: number,
 ): T[] {
-  if (crossDelta <= 0) return nodes
   const box = nodes.find((n) => n.id === expandedId)
   if (!box) return nodes
+  // Grown rect anchored at the box's fixed leading corner.
+  const rect = { x: box.position.x, y: box.position.y, w: grownWidth, h: grownHeight }
+  return gapShiftCrossRect(nodes, rect, primaryAxis, new Set([expandedId]))
+}
+
+export type Rect = { x: number; y: number; w: number; h: number }
+
+/** Push siblings clear of an explicit rect (cross axis), the rect-driven core
+ *  shared by `gapShiftCross`.
+ *
+ *  Unlike `gapShiftCross` — which reconstructs the grown box from a member id and
+ *  predicted width/height — this takes the *actual* rendered rect. The rendered
+ *  expand wrapper is sized to its real (possibly user-dragged) child positions,
+ *  which can exceed dagre's predicted growth; sizing the push from the prediction
+ *  left dragged-out siblings still overlapping. Feeding the true wrapper rect here
+ *  guarantees a sibling lands fully outside it.
+ *
+ *  Any node NOT in `excludeIds` that overlaps `rect` on both axes is pushed out
+ *  along the cross axis by the minimum distance to clear, toward whichever side it
+ *  is nearer to, leaving EXPAND_MARGIN of gap. `excludeIds` should cover the box's
+ *  own members so the wrapper's children aren't shoved out of their own wrapper. */
+export function gapShiftCrossRect<T extends LayoutNode>(
+  nodes: T[],
+  rect: Rect,
+  primaryAxis: ShiftAxis,
+  excludeIds: Set<string> = new Set(),
+): T[] {
   const cross: ShiftAxis = primaryAxis === 'x' ? 'y' : 'x'
 
-  const primStart = primaryAxis === 'x' ? box.position.x : box.position.y
-  const primEnd = primStart + grownPrimary
-  const boxCrossSize = cross === 'x' ? box.width : box.height
-  const boxCrossStart = cross === 'x' ? box.position.x : box.position.y
-  // Where the box's trailing cross edge sat collapsed vs. after growing.
-  const crossTrailingCollapsed = boxCrossStart + boxCrossSize
-  const crossTrailingGrown = crossTrailingCollapsed + crossDelta
+  const gx1 = rect.x
+  const gy1 = rect.y
+  const gx2 = gx1 + rect.w
+  const gy2 = gy1 + rect.h
+  const boxCrossStart = cross === 'x' ? gx1 : gy1
+  const boxCrossEnd = cross === 'x' ? gx2 : gy2
+  const boxCenterCross = (boxCrossStart + boxCrossEnd) / 2
 
   return nodes.map((node) => {
-    if (node.id === expandedId) return node
-    const nPrimStart = primaryAxis === 'x' ? node.position.x : node.position.y
-    const nPrimSize = primaryAxis === 'x' ? node.width : node.height
-    // No overlap on the primary axis → grown box never reaches this node.
-    if (nPrimStart + nPrimSize <= primStart || nPrimStart >= primEnd) return node
-    const nCrossLead = cross === 'x' ? node.position.x : node.position.y
-    // Only trailing-side neighbours the grown box actually penetrates: those
-    // whose leading edge sat beyond the collapsed box but inside the grown box.
-    // A node already clear of the grown footprint keeps its gap and stays put.
-    if (nCrossLead < crossTrailingCollapsed || nCrossLead >= crossTrailingGrown) return node
+    if (excludeIds.has(node.id)) return node
+    // Overlap on both axes against the rect.
+    const nx2 = node.position.x + node.width
+    const ny2 = node.position.y + node.height
+    const overlaps = node.position.x < gx2 && nx2 > gx1 && node.position.y < gy2 && ny2 > gy1
+    if (!overlaps) return node
+
+    const lead = cross === 'x' ? node.position.x : node.position.y
+    const size = cross === 'x' ? node.width : node.height
+    const center = lead + size / 2
+    // Push out the nearer side, leaving EXPAND_MARGIN of gap: a node on the
+    // leading half slides off the leading edge (negative), one on the trailing
+    // half slides off the trailing edge.
+    const delta = center < boxCenterCross
+      ? (boxCrossStart - EXPAND_MARGIN - size) - lead
+      : (boxCrossEnd + EXPAND_MARGIN) - lead
     return {
       ...node,
       position: cross === 'x'
-        ? { x: node.position.x + crossDelta, y: node.position.y }
-        : { x: node.position.x, y: node.position.y + crossDelta },
+        ? { x: node.position.x + delta, y: node.position.y }
+        : { x: node.position.x, y: node.position.y + delta },
     }
   })
 }
