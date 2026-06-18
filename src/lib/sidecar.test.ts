@@ -85,6 +85,20 @@ describe('extractSidecar', () => {
     const result = extractSidecar(ws)
     expect(result!.version).toBe(1)
   })
+
+  it('captures dragged expand-in-place child positions', () => {
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews[0].expandedLayout = [{ id: 'child1', x: 50, y: 75 }]
+    const result = extractSidecar(ws)
+    expect(result!.views?.['sl1']?.expanded?.['child1']).toEqual({ x: 50, y: 75 })
+  })
+
+  it('skips expanded children missing x or y', () => {
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews[0].expandedLayout = [{ id: 'child1', x: 50 }]
+    const result = extractSidecar(ws)
+    expect(result).toBeNull()
+  })
 })
 
 // ─── applySidecar ────────────────────────────────────────────────────
@@ -136,6 +150,24 @@ describe('applySidecar', () => {
     expect(ws.views.systemLandscapeViews[0].elements[0].pinned).toBe(true)
     expect(ws.views.systemLandscapeViews[0].elements[0].x).toBeUndefined()
     expect(ws.views.systemLandscapeViews[0].elements[0].y).toBeUndefined()
+  })
+
+  it('restores expand-in-place child positions into view.expandedLayout', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { expanded: { child1: { x: 50, y: 75 } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].expandedLayout).toEqual([{ id: 'child1', x: 50, y: 75 }])
+  })
+
+  it('ignores non-finite expanded child coordinates defensively', () => {
+    const ws = makeWorkspace()
+    applySidecar(ws, {
+      version: 1,
+      views: { sl1: { expanded: { child1: { x: Number.NaN, y: 10 } } } },
+    })
+    expect(ws.views.systemLandscapeViews[0].expandedLayout).toBeUndefined()
   })
 
   it('is a no-op when version !== 1', () => {
@@ -236,6 +268,17 @@ describe('parseSidecar', () => {
     expect(parseSidecar(JSON.stringify({
       version: 1,
       views: { sl1: { elements: { alice: { pinned: 'yes' } } } },
+    }))).toBeNull()
+  })
+
+  it('returns null for invalid expanded child metadata', () => {
+    expect(parseSidecar(JSON.stringify({
+      version: 1,
+      views: { sl1: { expanded: { child1: { x: 'nope', y: 10 } } } },
+    }))).toBeNull()
+    expect(parseSidecar(JSON.stringify({
+      version: 1,
+      views: { sl1: { expanded: [] } },
     }))).toBeNull()
   })
 })

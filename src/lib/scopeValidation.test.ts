@@ -50,14 +50,12 @@ describe('validateScope', () => {
     expect(violations).toHaveLength(0)
   })
 
-  it('explains that multiple system internals, not multiple context systems, violate software-system scope', () => {
+  it('allows a software-system scoped workspace to define internals for multiple systems', () => {
     const violations = validateScope(workspace([
       system('science', 'Science', ['science-api']),
       system('platform', 'Platform', ['platform-api']),
     ]))
 
-    expect(violations).toHaveLength(1)
-    expect(violations[0].message).toContain('System Context views can show multiple software systems')
-    expect(violations[0].message).toContain('Found internals for 2: Science, Platform')
+    expect(violations).toHaveLength(0)
   })
 })

@@ -1,16 +1,36 @@
 import { memo } from 'react'
+import { Minimize2, Plus } from 'lucide-react'
 import type { NodeProps } from '@xyflow/react'
+import { useWorkspaceStore } from '@/store/workspace'
+import NodeHandles from './NodeHandles'
 
 interface BoundaryNodeData {
   name: string
   typeLabel: string
   empty?: boolean
+  /** Expand-in-place boundary: render a collapse control that folds the
+   *  element's children back into a single collapsed node. */
+  collapsible?: boolean
+  elementId?: string
 }
 
 function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }) {
-  const emptyTitle = data.typeLabel === 'Software System'
+  const collapseElement = useWorkspaceStore((s) => s.collapseElement)
+  const addContainer = useWorkspaceStore((s) => s.addContainer)
+  const addComponent = useWorkspaceStore((s) => s.addComponent)
+  const isSystem = data.typeLabel === 'Software System'
+  const emptyTitle = isSystem
     ? 'Add containers to this system'
     : 'Add components to this container'
+
+  // Expand-in-place add: create a child of the expanded element, shown inside
+  // this boundary via the parent's expansion. skipActiveView keeps it out of
+  // the underlying (e.g. landscape) view so it never renders as a stray node.
+  const addChild = () => {
+    if (!data.elementId) return
+    if (isSystem) addContainer(data.elementId, 'New Container', undefined, undefined, { skipActiveView: true })
+    else addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
+  }
 
   return (
     <>
@@ -23,32 +43,55 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
           zIndex: 1,
           padding: '8px 12px',
           display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: 8,
           cursor: 'grab',
           pointerEvents: 'auto',
           touchAction: 'none',
           userSelect: 'none',
         }}
       >
-        <span style={{
-          fontSize: 'var(--text-xs-plus)',
-          fontWeight: 700,
-          color: 'var(--canvas-boundary-title, var(--color-text-dim))',
-          letterSpacing: '0.02em',
-          whiteSpace: 'nowrap',
-        }}>
-          {data.name}
-        </span>
-        <span style={{
-          fontSize: 'var(--text-xxs)',
-          fontWeight: 500,
-          color: 'var(--canvas-boundary-subtitle, var(--color-text-ghost))',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-        }}>
-          {data.typeLabel}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{
+            fontSize: 'var(--text-xs-plus)',
+            fontWeight: 700,
+            color: 'var(--canvas-boundary-title, var(--color-text-dim))',
+            letterSpacing: '0.02em',
+            whiteSpace: 'nowrap',
+          }}>
+            {data.name}
+          </span>
+          <span style={{
+            fontSize: 'var(--text-xxs)',
+            fontWeight: 500,
+            color: 'var(--canvas-boundary-subtitle, var(--color-text-ghost))',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+          }}>
+            {data.typeLabel}
+          </span>
+        </div>
+        {data.collapsible && data.elementId && (
+          <>
+            <button
+              className="c4-node-action-btn nodrag"
+              style={{ marginTop: 1 }}
+              onClick={(e) => { e.stopPropagation(); addChild() }}
+              aria-label={isSystem ? `Add container to ${data.name}` : `Add component to ${data.name}`}
+            >
+              <Plus size={11} aria-hidden="true" />
+            </button>
+            <button
+              className="c4-node-action-btn nodrag"
+              style={{ marginTop: 1 }}
+              onClick={(e) => { e.stopPropagation(); collapseElement(data.elementId!) }}
+              aria-label={`Collapse ${data.name}`}
+            >
+              <Minimize2 size={11} aria-hidden="true" />
+            </button>
+          </>
+        )}
       </div>
       <div
         className={`c4-boundary-node ${selected ? 'selected' : ''}`}
@@ -65,6 +108,10 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
           userSelect: 'none',
         }}
       >
+      {/* Expand boundaries can be edge endpoints: a parent-level relationship
+          (e.g. A→B) attaches to this wrapper box when B is expanded, instead of
+          diving onto a child. Handles are invisible anchors for that routing. */}
+      {data.collapsible && <NodeHandles />}
       {data.empty && (
         <div
           style={{

@@ -35,8 +35,15 @@ interface SidecarViewElement {
   y?: number
 }
 
+interface SidecarExpandedElement {
+  x?: number
+  y?: number
+}
+
 interface SidecarView {
   elements?: Record<string, SidecarViewElement>
+  /** Absolute positions of dragged expand-in-place children, keyed by child id. */
+  expanded?: Record<string, SidecarExpandedElement>
 }
 
 export interface SidecarData {
@@ -67,9 +74,17 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
   return true
 }
 
+function isSidecarExpandedElement(value: unknown): value is SidecarExpandedElement {
+  if (!isRecord(value)) return false
+  if ('x' in value && value.x !== undefined && !isFiniteNumber(value.x)) return false
+  if ('y' in value && value.y !== undefined && !isFiniteNumber(value.y)) return false
+  return true
+}
+
 function isSidecarView(value: unknown): value is SidecarView {
   if (!isRecord(value)) return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarViewElement)) return false
+  if ('expanded' in value && value.expanded !== undefined && !isRecordOf(value.expanded, isSidecarExpandedElement)) return false
   return true
 }
 
@@ -104,9 +119,17 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
         hasData = true
       }
     }
-    if (Object.keys(viewElements).length > 0) {
-      views[view.key] = { elements: viewElements }
+    const expanded: Record<string, SidecarExpandedElement> = {}
+    for (const el of view.expandedLayout ?? []) {
+      if (el.x !== undefined && el.y !== undefined) {
+        expanded[el.id] = { x: el.x, y: el.y }
+        hasData = true
+      }
     }
+    const viewEntry: SidecarView = {}
+    if (Object.keys(viewElements).length > 0) viewEntry.elements = viewElements
+    if (Object.keys(expanded).length > 0) viewEntry.expanded = expanded
+    if (Object.keys(viewEntry).length > 0) views[view.key] = viewEntry
   }
   if (Object.keys(views).length > 0) sidecar.views = views
 
@@ -159,18 +182,34 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
     }
   }
 
-  // Views: pinned
+  // Views: pinned + expand-in-place child positions
   if (sidecar.views) {
     for (const view of allViewsOf(workspace)) {
       const viewData = sidecar.views[view.key]
-      if (!viewData?.elements) continue
-      for (const el of view.elements) {
-        const elData = viewData.elements[el.id]
-        if (elData?.pinned) {
-          el.pinned = true
-          if (isFiniteNumber(elData.x)) el.x = elData.x
-          if (isFiniteNumber(elData.y)) el.y = elData.y
+      if (!viewData) continue
+      if (viewData.elements) {
+        for (const el of view.elements) {
+          const elData = viewData.elements[el.id]
+          if (elData?.pinned) {
+            el.pinned = true
+            if (isFiniteNumber(elData.x)) el.x = elData.x
+            if (isFiniteNumber(elData.y)) el.y = elData.y
+          }
         }
+      }
+      if (viewData.expanded) {
+        const expandedLayout = view.expandedLayout ?? []
+        for (const [id, pos] of Object.entries(viewData.expanded)) {
+          if (!isFiniteNumber(pos.x) || !isFiniteNumber(pos.y)) continue
+          const existing = expandedLayout.find((e) => e.id === id)
+          if (existing) {
+            existing.x = pos.x
+            existing.y = pos.y
+          } else {
+            expandedLayout.push({ id, x: pos.x, y: pos.y })
+          }
+        }
+        if (expandedLayout.length > 0) view.expandedLayout = expandedLayout
       }
     }
   }

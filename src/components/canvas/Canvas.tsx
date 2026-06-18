@@ -35,11 +35,19 @@ import RelationshipEdge from './edges/RelationshipEdge'
 import {
   buildNodes,
   buildEdges,
+  buildCompositeEdges,
   buildGroupNodes,
   buildBoundaryNodes,
   buildDrillableSet,
   buildBoundaryLayoutClusters,
+  buildElementStyleIndex,
+  buildExpandBoundaryNodes,
+  EXPAND_BOUNDARY_PREFIX,
 } from './canvasBuilders'
+import { highlightActive } from '@/lib/highlight'
+import { canConnectElements } from '@/lib/connectionValidation'
+import { expandComposite } from '@/lib/expandComposite'
+import { axisForDirection, gapShiftMany } from '@/lib/expandLayout'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -90,6 +98,30 @@ function getBoundaryMemberIds(workspace: Workspace | null | undefined, view: Vie
   return memberIds
 }
 
+/** Visible descendant element ids of an expand-in-place parent (system →
+ *  containers + their components; container → its components). Used to drag an
+ *  expanded box as a unit. */
+function getExpandBoundaryMemberIds(workspace: Workspace | null | undefined, elementId: string): Set<string> {
+  const ids = new Set<string>()
+  if (!workspace) return ids
+  for (const sys of workspace.model.softwareSystems) {
+    if (sys.id === elementId) {
+      for (const c of sys.containers) {
+        ids.add(c.id)
+        for (const comp of c.components) ids.add(comp.id)
+      }
+      return ids
+    }
+    for (const c of sys.containers) {
+      if (c.id === elementId) {
+        for (const comp of c.components) ids.add(comp.id)
+        return ids
+      }
+    }
+  }
+  return ids
+}
+
 function getNestedGroupNodeIds(workspace: Workspace | null | undefined, memberIds: Set<string>, draggedNodeId: string): Set<string> {
   const nestedGroupIds = new Set<string>()
   if (!workspace || memberIds.size === 0) return nestedGroupIds
@@ -105,6 +137,19 @@ function getNestedGroupNodeIds(workspace: Workspace | null | undefined, memberId
 
 function isOverlayNode(node: Pick<Node, 'id' | 'type'>): boolean {
   return node.type === 'group' || node.type === 'boundary' || node.id.startsWith('group-') || isScopeBoundaryNode(node)
+}
+
+/** A content node revealed by expand-in-place: it carries a model element but is
+ *  NOT one of the view's own elements (those are the top-level/collapsed nodes).
+ *  Only meaningful while something is expanded. */
+function isExpandedChildNode(
+  node: Node,
+  view: View | null | undefined,
+  expandedIds: string[],
+): boolean {
+  if (expandedIds.length === 0 || isOverlayNode(node)) return false
+  if (!node.data || !('element' in node.data)) return false
+  return !(view?.elements.some((e) => e.id === node.id) ?? false)
 }
 
 function nodeNumberStyle(node: Node, key: 'width' | 'height'): number | undefined {
@@ -130,13 +175,14 @@ function sameOverlayGeometry(a: Node, b: Node): boolean {
   return samePosition && sameSize && sameState && sameData
 }
 
-function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, nodes: Node[]): Node[] {
+function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, nodes: Node[], expandedIds: Set<string> = new Set()): Node[] {
   const contentOnly = nodes.filter((n) => !isOverlayNode(n))
   const previousOverlays = new Map(nodes.filter(isOverlayNode).map((n) => [n.id, n]))
   const boundaryClusters = view ? buildBoundaryLayoutClusters(workspace, view) : []
   const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters)
   const updatedBoundaries = view ? buildBoundaryNodes(workspace, view, contentOnly, updatedGroups) : []
-  const overlays = [...updatedBoundaries, ...updatedGroups].map((overlay) => {
+  const updatedExpandBoundaries = buildExpandBoundaryNodes(contentOnly, expandedIds, workspace)
+  const overlays = [...updatedBoundaries, ...updatedExpandBoundaries, ...updatedGroups].map((overlay) => {
     const previous = previousOverlays.get(overlay.id)
     return previous && sameOverlayGeometry(previous, overlay) ? previous : overlay
   })
@@ -163,6 +209,7 @@ const MARKER_SVG_STYLE: React.CSSProperties = { position: 'absolute', width: 0, 
 export default function Canvas() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
+  const expandedElementIds = useWorkspaceStore((s) => s.expandedElementIds)
   const selectElements = useWorkspaceStore((s) => s.selectElements)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
@@ -172,6 +219,7 @@ export default function Canvas() {
   const storeSelectedRelationshipId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const storeSelectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
   const updateNodePosition = useWorkspaceStore((s) => s.updateNodePosition)
+  const updateExpandedChildPosition = useWorkspaceStore((s) => s.updateExpandedChildPosition)
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const syncAutoLayoutPositions = useWorkspaceStore((s) => s.syncAutoLayoutPositions)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
@@ -356,17 +404,73 @@ export default function Canvas() {
     const boundaryInternalIds = new Set(boundaryClusters.find((cluster) => cluster.id === focalBoundaryId)?.elementIds ?? [])
     const laidOut = applyAutoLayout(layoutNodes, tempEdges, view, workspace.model.groups, direction, boundaryInternalIds, boundaryClusters)
 
-    // 4. Build group background nodes and scope boundary using post-layout positions
-    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, laidOut, boundaryClusters)
-    const boundaryNodes = buildBoundaryNodes(workspace, view, laidOut, groupNodes)
-    const overlayNodes = [...boundaryNodes, ...groupNodes]
-    const allNodes = [...overlayNodes, ...laidOut]
+    // 3b. Expand-in-place: replace expanded top-level nodes with their children,
+    //     laid out inside the footprint the collapsed node occupied. First a
+    //     sizing pass measures each expanded box's grown footprint, then we
+    //     gap-shift siblings out of the way so the children don't overlap them,
+    //     then we expand into the shifted layout.
+    let expandedNodes = laidOut
+    if (expandedElementIds.length > 0) {
+      const expandCtx = {
+        expandedIds: new Set(expandedElementIds),
+        direction,
+        relationships: workspace.model.relationships,
+        styleIndex: buildElementStyleIndex(workspace, themeStyles),
+        active: highlightActive(highlightFilters),
+        filters: highlightFilters,
+        drillableIds,
+        onDrillIn: stableDrillInto,
+        viewCountMap,
+      }
+      // Sizing pass: how much each top-level expanded box grows vs 200×100.
+      const { growth } = expandComposite(laidOut, expandCtx)
+      const axis = axisForDirection(direction)
+      const shifts = growth.map((g) => ({
+        expandedId: g.expandedId,
+        delta: axis === 'x' ? Math.max(0, g.width - 200) : Math.max(0, g.height - 100),
+      }))
+      const layoutNodesForShift = laidOut.map((n) => ({
+        id: n.id,
+        position: n.position,
+        width: n.measured?.width ?? (Number(n.style?.width) || 200),
+        height: n.measured?.height ?? (Number(n.style?.height) || 100),
+      }))
+      const shiftedById = new Map(
+        gapShiftMany(layoutNodesForShift, shifts, axis).map((n) => [n.id, n.position]),
+      )
+      const shiftedLaidOut = laidOut.map((n) => ({ ...n, position: shiftedById.get(n.id) ?? n.position }))
+      expandedNodes = expandComposite(shiftedLaidOut, expandCtx).nodes
 
-    // 5. Build final edges using post-layout positions for handle routing
-    const edges = buildEdges(workspace, view, allNodes, highlightFilters)
+      // Override expanded-child positions the user has manually dragged. These
+      // ride in view.expandedLayout (sidecar-persisted) as absolute coords and
+      // must win over the recomputed subtree layout.
+      const savedExpanded = new Map((view.expandedLayout ?? []).map((e) => [e.id, e]))
+      if (savedExpanded.size > 0) {
+        expandedNodes = expandedNodes.map((n) => {
+          const saved = savedExpanded.get(n.id)
+          return saved && saved.x !== undefined && saved.y !== undefined
+            ? { ...n, position: { x: saved.x, y: saved.y } }
+            : n
+        })
+      }
+    }
+
+    // 4. Build group background nodes and scope boundary using post-layout positions
+    const groupNodes = buildGroupNodes(workspace, workspace.model.groups, expandedNodes, boundaryClusters)
+    const boundaryNodes = buildBoundaryNodes(workspace, view, expandedNodes, groupNodes)
+    const expandBoundaries = buildExpandBoundaryNodes(expandedNodes, new Set(expandedElementIds), workspace)
+    const overlayNodes = [...boundaryNodes, ...expandBoundaries, ...groupNodes]
+    const allNodes = [...overlayNodes, ...expandedNodes]
+
+    // 5. Build final edges using post-layout positions for handle routing.
+    //    When anything is expanded, re-target relationships onto nearest visible
+    //    ancestors (bundling fan-in to collapsed siblings).
+    const edges = expandedElementIds.length > 0
+      ? buildCompositeEdges(workspace, allNodes, highlightFilters)
+      : buildEdges(workspace, view, allNodes, highlightFilters)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.
@@ -403,8 +507,10 @@ export default function Canvas() {
   // Keep stable refs so fitContentNodes (useCallback) always sees current values
   const workspaceRef = useRef(workspace)
   const viewRef = useRef(view)
+  const expandedIdsRef = useRef<Set<string>>(new Set(expandedElementIds))
   useEffect(() => { workspaceRef.current = workspace }, [workspace])
   useEffect(() => { viewRef.current = view }, [view])
+  useEffect(() => { expandedIdsRef.current = new Set(expandedElementIds) }, [expandedElementIds])
 
   // Rebuild group + boundary overlays using real measured node sizes. Polls
   // until React Flow has finished measuring; safe to call after any change
@@ -438,9 +544,9 @@ export default function Canvas() {
     }
     setNodes((prev) => {
       const contentOnly = prev
-        .filter(n => !n.id.startsWith('group-') && !n.id.startsWith('__scope_boundary__'))
+        .filter(n => !n.id.startsWith('group-') && !n.id.startsWith('__scope_boundary__') && !n.id.startsWith(EXPAND_BOUNDARY_PREFIX))
         .map(n => ({ ...n, measured: measuredById.get(n.id) ?? n.measured }))
-      return rebuildNodesWithOverlays(ws, v, contentOnly)
+      return rebuildNodesWithOverlays(ws, v, contentOnly, expandedIdsRef.current)
     })
   }, [reactFlowInstance, setNodes])
 
@@ -532,7 +638,14 @@ export default function Canvas() {
   }, [])
 
   useEffect(() => {
-    const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}`
+    // The content-node id set is included so expand-in-place child adds register
+    // as structural: those use skipActiveView (they render via parent expansion,
+    // not the active view), so view.elements.length stays flat. The node *count*
+    // can also stay flat — adding the first child swaps the parent's hidden
+    // placeholder node for the child — so we key off the actual node ids, which
+    // do change. Without this the new child never reaches React Flow state.
+    const nodeIdSignal = initialNodes.map((n) => n.id).join(',')
+    const signal = `${activeViewKey}:${view?.elements.length ?? 0}:${layoutVersion}:${expandedElementIds.join(',')}:${nodeIdSignal}`
     if (signal !== lastStructuralSignal.current) {
       const prevSignal = lastStructuralSignal.current
       lastStructuralSignal.current = signal
@@ -637,7 +750,7 @@ export default function Canvas() {
     }
     // When content nodes get measured/resized, rebuild group/boundary overlays
     // so they wrap the actual rendered sizes, not the 200×100 dagre defaults.
-    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && !(c.id as string).startsWith('__scope_boundary__'))) {
+    if (changes.some(c => c.type === 'dimensions' && 'id' in c && !(c.id as string).startsWith('group-') && !(c.id as string).startsWith('__scope_boundary__') && !(c.id as string).startsWith(EXPAND_BOUNDARY_PREFIX))) {
       requestAnimationFrame(rebuildOverlays)
     }
   }, [onNodesChange, fitContentNodes, rebuildOverlays])
@@ -696,11 +809,15 @@ export default function Canvas() {
     nodeStart: { x: number; y: number }
     memberStart: Map<string, { x: number; y: number }>
     persistedMemberIds: Set<string>
+    /** When true, members are expand-in-place children — persist their absolute
+     *  positions into view.expandedLayout, not view.elements. */
+    expandedChildren: boolean
   } | null>(null)
 
   const onNodeDragStart = useCallback((_event: MouseEvent | TouchEvent, node: Node) => {
     isDragging.current = false
     let memberSet: Set<string> | null = null
+    let expandedChildren = false
 
     if (node.id.startsWith('group-')) {
       const groupId = node.id.slice(6)
@@ -708,6 +825,10 @@ export default function Canvas() {
       const group = ws?.model.groups.find((g) => g.id === groupId)
       if (!group) { overlayDragRef.current = null; return }
       memberSet = new Set(group.elementIds)
+    } else if (node.id.startsWith(EXPAND_BOUNDARY_PREFIX)) {
+      const elementId = node.id.slice(EXPAND_BOUNDARY_PREFIX.length)
+      memberSet = getExpandBoundaryMemberIds(workspaceRef.current, elementId)
+      expandedChildren = true
     } else if (isScopeBoundaryNode(node)) {
       memberSet = getBoundaryMemberIds(workspaceRef.current, viewRef.current, node.id)
     } else {
@@ -730,6 +851,7 @@ export default function Canvas() {
       nodeStart: { x: node.position.x, y: node.position.y },
       memberStart,
       persistedMemberIds,
+      expandedChildren,
     }
   }, [reactFlowInstance])
 
@@ -754,7 +876,7 @@ export default function Canvas() {
         })
         const ws = workspaceRef.current
         if (!ws || ctx.memberStart.size === 0) return moved
-        return rebuildNodesWithOverlays(ws, viewRef.current, moved)
+        return rebuildNodesWithOverlays(ws, viewRef.current, moved, expandedIdsRef.current)
       })
       return
     }
@@ -763,7 +885,7 @@ export default function Canvas() {
     if (!ws || isOverlayNode(node)) return
     setNodes((prev) => {
       const moved = prev.map((n) => n.id === node.id ? { ...n, position: node.position } : n)
-      return rebuildNodesWithOverlays(ws, viewRef.current, moved)
+      return rebuildNodesWithOverlays(ws, viewRef.current, moved, expandedIdsRef.current)
     })
   }, [setNodes])
 
@@ -957,11 +1079,23 @@ export default function Canvas() {
           if (!ctx.persistedMemberIds.has(id)) continue
           updates.push({ id, x: start.x + dx, y: start.y + dy })
         }
-        if (updates.length > 0) updateNodePositions(updates)
+        if (updates.length > 0) {
+          if (ctx.expandedChildren) {
+            // Moving an expanded box: members are expand-in-place children.
+            for (const u of updates) updateExpandedChildPosition(u.id, u.x, u.y)
+          } else {
+            updateNodePositions(updates)
+          }
+        }
         shouldRebuildOverlays = updates.length > 0
         overlayDragRef.current = null
       } else if (isScopeBoundaryNode(node)) {
         shouldRebuildOverlays = false
+      } else if (isExpandedChildNode(node, viewRef.current, expandedIdsRef.current)) {
+        // Expand-in-place children aren't in view.elements, so updateNodePosition
+        // would silently no-op (and the drag would snap back on rebuild). Persist
+        // their absolute position into view.expandedLayout instead.
+        updateExpandedChildPosition(node.id, node.position.x, node.position.y)
       } else {
         updateNodePosition(node.id, node.position.x, node.position.y)
       }
@@ -971,13 +1105,13 @@ export default function Canvas() {
       const v = viewRef.current
       if (ws && shouldRebuildOverlays) {
         setNodes(prev => {
-          return rebuildNodesWithOverlays(ws, v, prev)
+          return rebuildNodesWithOverlays(ws, v, prev, expandedIdsRef.current)
         })
       }
       // Reset drag flag slightly after stop so any trailing onSelectionChange is still suppressed
       setTimeout(() => { isDragging.current = false }, 50)
     },
-    [updateNodePosition, updateNodePositions, setNodes],
+    [updateNodePosition, updateExpandedChildPosition, updateNodePositions, setNodes],
   )
 
 
@@ -986,9 +1120,20 @@ export default function Canvas() {
   // multiple handles — dedup only on the exact same direction (source→target).
   // We intentionally allow B→A right after A→B so bidirectional relationships work.
   const recentConnect = useRef<Set<string>>(new Set())
+
+  // Block cross-level connections (e.g. a container shown via expand-in-place
+  // dragged to a top-level system). React Flow calls this while dragging so the
+  // invalid target never highlights; we re-check in onConnect as a backstop.
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) =>
+      canConnectElements(workspaceRef.current, connection.source, connection.target),
+    [],
+  )
+
   const onConnect = useCallback(
     (connection: Connection) => {
       if (connection.source && connection.target && connection.source !== connection.target) {
+        if (!canConnectElements(workspaceRef.current, connection.source, connection.target)) return
         const key = `${connection.source}->${connection.target}`
         if (recentConnect.current.has(key)) return
         recentConnect.current.add(key)
@@ -1002,6 +1147,7 @@ export default function Canvas() {
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       if (newConnection.source && newConnection.target) {
+        if (!canConnectElements(workspaceRef.current, newConnection.source, newConnection.target)) return
         reconnectRelationship(oldEdge.id, newConnection.source, newConnection.target)
         setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
       }
@@ -1073,6 +1219,7 @@ export default function Canvas() {
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
+        isValidConnection={isValidConnection}
         onReconnect={onReconnect}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}

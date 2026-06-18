@@ -69,7 +69,7 @@ export default function BaseC4Node({
   })))
   const reasonLabel = data.highlighted ? pickHighlightReason(data.element, filters) : null
   const selected = rfSelected || storeSelected
-  const { element, childCount, onDrillIn, viewCount = 1 } = data
+  const { element, childCount, viewCount = 1 } = data
   const desc = element.description ?? ''
   const style = data.style
 
@@ -175,7 +175,7 @@ export default function BaseC4Node({
             </span>
           )}
           {childCount !== undefined && (
-            <ZoomButton element={element} typeColor={resolvedTypeColor} onDrillIn={onDrillIn} />
+            <ZoomButton element={element} typeColor={resolvedTypeColor} />
           )}
         </div>
       </div>
@@ -248,14 +248,17 @@ export default function BaseC4Node({
   )
 }
 
-/** Zoom button with hover card popover */
-function ZoomButton({ element, typeColor, onDrillIn }: {
+/** Zoom button with hover card popover. Clicking expands the element in place
+ *  (semantic zoom): its children appear inside its footprint and siblings stay
+ *  put. Clicking again collapses it. */
+function ZoomButton({ element, typeColor }: {
   element: C4NodeData['element']
   typeColor: string
-  onDrillIn?: (id: string) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toggleExpand = useWorkspaceStore((s) => s.toggleExpand)
+  const expanded = useWorkspaceStore((s) => s.expandedElementIds.includes(element.id))
 
   const show = useCallback(() => {
     if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null }
@@ -275,8 +278,9 @@ function ZoomButton({ element, typeColor, onDrillIn }: {
       <button
         className="c4-node-action-btn nodrag"
         style={{ color: typeColor }}
-        onClick={(e) => { e.stopPropagation(); onDrillIn?.(element.id) }}
-        aria-label={`Zoom into ${element.name}`}
+        onClick={(e) => { e.stopPropagation(); toggleExpand(element.id) }}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${element.name}`}
+        aria-pressed={expanded}
       >
         <ZoomIn size={11} aria-hidden="true" />
       </button>

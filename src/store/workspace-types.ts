@@ -46,6 +46,11 @@ export interface WorkspaceState extends UndoState {
   activeViewKey: string | null
   viewHistory: string[]
 
+  // Expand-in-place (semantic zoom): element ids expanded inline on the canvas.
+  // Distinct from drillInto (which swaps views) — these stay in the same view and
+  // reveal children in place. Order is insertion order so nested expands compose.
+  expandedElementIds: string[]
+
   // Selection
   selectedElementIds: string[]
   selectedRelationshipId: string | null
@@ -123,6 +128,11 @@ export interface WorkspaceState extends UndoState {
   setCreateViewDefaults: (defaults: { type: ViewType; scopeId?: string } | null) => void
   navigateBack: () => void
 
+  // Expand-in-place
+  expandElement: (elementId: string) => void
+  collapseElement: (elementId: string) => void
+  toggleExpand: (elementId: string) => void
+
   // Selection
   selectElements: (ids: string[]) => void
   selectRelationship: (id: string) => void
@@ -132,8 +142,8 @@ export interface WorkspaceState extends UndoState {
   // Element CRUD
   addPerson: (name: string, position?: { x: number; y: number }, location?: 'Internal' | 'External') => string
   addSoftwareSystem: (name: string, position?: { x: number; y: number }, location?: 'Internal' | 'External') => string
-  addContainer: (systemId: string, name: string, position?: { x: number; y: number }, extraTag?: string) => string
-  addComponent: (containerId: string, name: string, position?: { x: number; y: number }) => string
+  addContainer: (systemId: string, name: string, position?: { x: number; y: number }, extraTag?: string, opts?: { skipActiveView?: boolean }) => string
+  addComponent: (containerId: string, name: string, position?: { x: number; y: number }, opts?: { skipActiveView?: boolean }) => string
   updateElement: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified' }) => void
   /** Same as updateElement but does NOT push an undo entry — for live typing previews */
   updateElementLive: (id: string, patch: Partial<Pick<ModelElement, 'name' | 'description' | 'tags' | 'status' | 'owner' | 'url'>> & { location?: 'Internal' | 'External' | 'Unspecified', technology?: string }) => void
@@ -159,6 +169,10 @@ export interface WorkspaceState extends UndoState {
   renameView: (key: string, title: string) => void
   duplicateView: (key: string) => string
   updateNodePosition: (nodeId: string, x: number, y: number) => void
+  /** Persist the absolute position of a dragged expand-in-place child into the
+   *  active view's expandedLayout (sidecar-backed). Expanded children are not in
+   *  view.elements, so updateNodePosition is a no-op for them. */
+  updateExpandedChildPosition: (nodeId: string, x: number, y: number) => void
   updateNodePositions: (updates: { id: string; x: number; y: number }[]) => void
   /** Fill in saved x/y for view elements that don't yet have positions. Used
    *  by Canvas to canonicalize the initial dagre layout so subsequent adds

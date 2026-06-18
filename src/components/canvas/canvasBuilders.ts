@@ -7,7 +7,8 @@ import {
   groupSpansBoundaryClusters,
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
-import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace } from '@/types/model'
+import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship } from '@/types/model'
+import { EMPTY_EXPAND_W, EMPTY_EXPAND_H } from '@/lib/expandComposite'
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
 function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
@@ -64,13 +65,70 @@ function getRelationshipStyle(
 }
 
 /** Get child count for drill-down hint. External systems are opaque and excluded. */
-function getChildCount(element: ModelElement): number | undefined {
+export function getChildCount(element: ModelElement): number | undefined {
   if (element.type === 'softwareSystem') {
     if (element.location === 'External') return undefined
     return element.containers.length
   }
   if (element.type === 'container') return element.components.length
   return undefined
+}
+
+/** Direct children of an element for expand-in-place: containers of a system,
+ *  components of a container. People/components have none. */
+export function getChildElements(element: ModelElement): ModelElement[] {
+  if (element.type === 'softwareSystem') return element.containers
+  if (element.type === 'container') return element.components
+  return []
+}
+
+/** Build the tag→style index for a workspace (theme styles as base layer,
+ *  custom workspace styles override). Exported so expand-in-place can color
+ *  child nodes identically to the top-level pass. */
+export function buildElementStyleIndex(
+  workspace: Workspace,
+  themeStyles: ElementStyle[],
+): Map<string, ElementStyle> {
+  const workspaceStyles = workspace.views.configuration.styles.elements
+    .map(stripThemeManagedStyleFields)
+    .filter((style): style is ElementStyle => style !== null)
+  return buildStyleIndex([...themeStyles, ...workspaceStyles])
+}
+
+export interface ContentNodeContext {
+  styleIndex: Map<string, ElementStyle>
+  active: boolean
+  filters: HighlightFilters
+  drillableIds: Set<string>
+  onDrillIn: (elementId: string) => void
+  viewCountMap: Map<string, number>
+}
+
+/** Build a single React Flow content node for an element at a given position.
+ *  Shared by buildNodes (top-level) and the expand-in-place composite builder
+ *  so colors, drill hints, and highlight classes stay consistent. */
+export function buildContentNode(
+  element: ModelElement,
+  position: { x: number; y: number },
+  ctx: ContentNodeContext,
+): Node {
+  const style = getElementStyle(element, ctx.styleIndex)
+  const highlighted = ctx.active && isHighlighted(element, ctx.filters)
+  return {
+    id: element.id,
+    type: element.type,
+    position,
+    data: {
+      element,
+      style,
+      childCount: getChildCount(element),
+      canDrill: ctx.drillableIds.has(element.id),
+      onDrillIn: ctx.onDrillIn,
+      highlighted,
+      viewCount: ctx.viewCountMap.get(element.id) ?? 1,
+    },
+    className: ctx.active ? (highlighted ? 'c4-node-highlighted' : 'c4-node-faded') : undefined,
+  }
 }
 
 /** Pick the best source/target handle sides based on relative node positions.
@@ -154,40 +212,16 @@ export function buildNodes(
   // Theme styles form the base layer. Truly custom workspace styles still
   // override them, but colors copied from our bundled palettes stay
   // theme-managed so switching themes updates node fills consistently.
-  const workspaceStyles = workspace.views.configuration.styles.elements
-    .map(stripThemeManagedStyleFields)
-    .filter((style): style is ElementStyle => style !== null)
-  const styleIndex = buildStyleIndex([...themeStyles, ...workspaceStyles])
+  const styleIndex = buildElementStyleIndex(workspace, themeStyles)
 
   const active = highlightActive(filters)
+  const ctx: ContentNodeContext = { styleIndex, active, filters, drillableIds, onDrillIn, viewCountMap }
   const nodes: Node[] = []
 
   for (const viewEl of view.elements) {
     const element = elementMap.get(viewEl.id)
     if (!element) continue
-
-    const style = getElementStyle(element, styleIndex)
-    const highlighted = active && isHighlighted(element, filters)
-    const pos = { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }
-
-    nodes.push({
-      id: element.id,
-      type: element.type,
-      position: pos,
-      data: {
-        element,
-        style,
-        childCount: getChildCount(element),
-        canDrill: drillableIds.has(element.id),
-        onDrillIn,
-        highlighted,
-        viewCount: viewCountMap.get(element.id) ?? 1,
-      },
-      // Highlighter focus mode: matched nodes get the highlighted ring; the rest
-      // fade to ghost context. When no facets are active, every node renders
-      // normally (no class either way).
-      className: active ? (highlighted ? 'c4-node-highlighted' : 'c4-node-faded') : undefined,
-    })
+    nodes.push(buildContentNode(element, { x: viewEl.x ?? 0, y: viewEl.y ?? 0 }, ctx))
   }
 
   return nodes
@@ -481,53 +515,58 @@ function pickSlots(n: number): string[] {
   return spread[n] ?? all
 }
 
-/** Build edges using final node positions for optimal handle routing. */
-export function buildEdges(
-  workspace: Workspace,
-  view: View,
+interface EdgeInfo {
+  /** React Flow edge id. Defaults to the relationship id; composite edges that
+   *  fan one relationship onto several visible endpoints get a suffixed id so
+   *  React Flow keys stay unique. */
+  edgeId: string
+  relId: string
+  sourceId: string
+  targetId: string
+  sourceSide: string
+  targetSide: string
+  relStyle: RelationshipStyle | undefined
+  rel: Relationship
+  /** When >1, this edge summarizes a bundle of finest relationships re-targeted
+   *  onto the same visible source/target pair (expand-in-place). */
+  bundleCount?: number
+}
+
+/** Compute the handle sides for an edge between two laid-out endpoints. */
+function makeEdgeInfo(
+  rel: Relationship,
+  sourceId: string,
+  targetId: string,
+  posMap: Map<string, { x: number; y: number }>,
+  relationshipStyles: RelationshipStyle[],
+): EdgeInfo {
+  const relStyle = getRelationshipStyle(rel.tags, relationshipStyles)
+  const srcPos = posMap.get(sourceId)
+  const dstPos = posMap.get(targetId)
+  const handles = srcPos && dstPos
+    ? computeHandlePair(srcPos, dstPos)
+    : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
+  return {
+    edgeId: rel.id,
+    relId: rel.id,
+    sourceId,
+    targetId,
+    sourceSide: handles.sourceHandle.split('-')[0],
+    targetSide: handles.targetHandle.split('-')[0],
+    relStyle,
+    rel,
+  }
+}
+
+/** Assign non-overlapping handle slots and assemble final React Flow edges from
+ *  pre-resolved EdgeInfos. Shared by buildEdges (view relationships) and
+ *  buildCompositeEdges (expand-in-place re-targeted relationships). */
+function assembleEdges(
+  edgeInfos: EdgeInfo[],
+  posMap: Map<string, { x: number; y: number }>,
   nodes: Node[],
   filters: HighlightFilters,
 ): Edge[] {
-  const relationshipMap = buildRelationshipMap(workspace)
-  const relationshipStyles = workspace.views.configuration.styles.relationships
-
-  // Position lookup from laid-out nodes
-  const posMap = new Map<string, { x: number; y: number }>()
-  for (const n of nodes) posMap.set(n.id, n.position)
-
-  const viewElementIds = new Set(view.elements.map(e => e.id))
-
-  // First pass: compute base side pairs for all edges
-  interface EdgeInfo {
-    relId: string
-    sourceId: string
-    targetId: string
-    sourceSide: string
-    targetSide: string
-    relStyle: ReturnType<typeof getRelationshipStyle>
-    rel: NonNullable<ReturnType<typeof relationshipMap.get>>
-  }
-
-  const edgeInfos: EdgeInfo[] = []
-  for (const viewRel of view.relationships) {
-    const rel = relationshipMap.get(viewRel.id)
-    if (!rel) continue
-    if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
-
-    const relStyle = getRelationshipStyle(rel.tags, relationshipStyles)
-    const srcPos = posMap.get(rel.sourceId)
-    const dstPos = posMap.get(rel.destinationId)
-    const handles = srcPos && dstPos
-      ? computeHandlePair(srcPos, dstPos)
-      : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
-
-    // Extract side name (e.g. "right" from "right-b-source")
-    const sourceSide = handles.sourceHandle.split('-')[0]
-    const targetSide = handles.targetHandle.split('-')[0]
-
-    edgeInfos.push({ relId: rel.id, sourceId: rel.sourceId, targetId: rel.destinationId, sourceSide, targetSide, relStyle, rel })
-  }
-
   // Second pass: count ALL edges per node+side (regardless of source/target direction),
   // then assign slots so edges sharing a side never overlap.
   const sideGroups = new Map<string, { edgeIndex: number; role: 'source' | 'target' }[]>()
@@ -589,7 +628,7 @@ export function buildEdges(
     else if (faded) className = 'c4-edge-faded'
 
     edges.push({
-      id: e.rel.id,
+      id: e.edgeId,
       source: e.sourceId,
       target: e.targetId,
       sourceHandle: `${e.sourceSide}-${srcSlot}-source`,
@@ -601,4 +640,286 @@ export function buildEdges(
   }
 
   return edges
+}
+
+/** Overlay-node id prefix for the box drawn around an expanded element's
+ *  children (semantic zoom). Mirrors SCOPE_BOUNDARY_PREFIX in Canvas. */
+export const EXPAND_BOUNDARY_PREFIX = '__expand_boundary__'
+
+// Must match the inner padding expandComposite uses so the boundary box lines
+// up with where the children were actually placed.
+const EB_PAD_X = 40
+const EB_PAD_TOP = 88
+const EB_PAD_BOTTOM = 40
+
+/** Draw a boundary box around the children of each expanded element. Computed
+ *  from the rendered child content nodes so it survives the overlay rebuild
+ *  pass (which strips and regenerates overlays). One box per expanded element;
+ *  nested expands nest (a container box inside its system box). */
+export function buildExpandBoundaryNodes(
+  contentNodes: Node[],
+  expandedIds: Set<string>,
+  workspace: Workspace,
+): Node[] {
+  if (expandedIds.size === 0) return []
+
+  const parentOf = buildParentMap(workspace)
+
+  // id → element metadata for label/type (the expanded element's own node is
+  // gone — replaced by its children — so read names from the model).
+  const meta = new Map<string, { name: string; type: ModelElement['type'] }>()
+  for (const sys of workspace.model.softwareSystems) {
+    meta.set(sys.id, { name: sys.name, type: 'softwareSystem' })
+    for (const c of sys.containers) {
+      meta.set(c.id, { name: c.name, type: 'container' })
+      for (const comp of c.components) meta.set(comp.id, { name: comp.name, type: 'component' })
+    }
+  }
+
+  const depthOf = (id: string): number => {
+    let d = 0
+    let cur = parentOf.get(id)
+    while (cur !== undefined) { d++; cur = parentOf.get(cur) }
+    return d
+  }
+
+  const ancestorIsExpanded = (id: string, target: string): boolean => {
+    let cur = parentOf.get(id)
+    while (cur !== undefined) {
+      if (cur === target) return true
+      cur = parentOf.get(cur)
+    }
+    return false
+  }
+
+  // Compute deepest-first so an outer (e.g. system) boundary can wrap the inner
+  // (e.g. container) boundary box — not just the leaf content nodes. Both boxes
+  // wrap the same descendants, so without nesting they'd come out identical and
+  // overlap exactly. Including the inner boundary rect makes each parent box
+  // strictly larger than its child by one padding ring.
+  // The hidden own-node of an expanded element with no children yet (kept in the
+  // graph by expandComposite so its position survives overlay rebuilds). Used to
+  // anchor an empty boundary the user can add the first child into.
+  const ownNodeById = new Map<string, Node>()
+  for (const n of contentNodes) {
+    if (expandedIds.has(n.id)) ownNodeById.set(n.id, n)
+  }
+
+  const ordered = [...expandedIds].sort((a, b) => depthOf(b) - depthOf(a))
+  const rectById = new Map<string, OverlayRect>()
+  const boundaries: Node[] = []
+  for (const expandedId of ordered) {
+    const info = meta.get(expandedId)
+    if (!info) continue
+
+    const typeLabel = info.type === 'softwareSystem' ? 'Software System'
+      : info.type === 'container' ? 'Container' : 'Component'
+
+    const memberRects: OverlayRect[] = contentNodes
+      .filter((n) => ancestorIsExpanded(n.id, expandedId))
+      .map((n) => nodeRect(n))
+    // Pull in the already-computed boundary boxes of any expanded descendants.
+    for (const [otherId, rect] of rectById) {
+      if (ancestorIsExpanded(otherId, expandedId)) memberRects.push(rect)
+    }
+    if (memberRects.length === 0) {
+      // Expanded but childless: draw an empty boundary over the footprint its
+      // hidden own-node occupies, with an "add child" affordance + collapse.
+      const own = ownNodeById.get(expandedId)
+      if (!own) continue
+      // Match the footprint gap-shift reserved (EMPTY_EXPAND_W/H), anchored at
+      // the hidden node's leading corner, so the boundary fills that gap exactly.
+      const r: OverlayRect = { x: own.position.x, y: own.position.y, w: EMPTY_EXPAND_W, h: EMPTY_EXPAND_H }
+      rectById.set(expandedId, r)
+      boundaries.push({
+        id: `${EXPAND_BOUNDARY_PREFIX}${expandedId}`,
+        type: 'boundary',
+        position: { x: r.x, y: r.y },
+        measured: { width: r.w, height: r.h },
+        style: { width: r.w, height: r.h, pointerEvents: 'none' },
+        data: { name: info.name, typeLabel, empty: true, collapsible: true, elementId: expandedId },
+        zIndex: -5 + depthOf(expandedId),
+        selectable: false,
+        draggable: false,
+        focusable: false,
+      })
+      continue
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const r of memberRects) {
+      minX = Math.min(minX, r.x)
+      minY = Math.min(minY, r.y)
+      maxX = Math.max(maxX, r.x + r.w)
+      maxY = Math.max(maxY, r.y + r.h)
+    }
+
+    const x = minX - EB_PAD_X
+    const y = minY - EB_PAD_TOP
+    const w = (maxX - minX) + EB_PAD_X * 2
+    const h = (maxY - minY) + EB_PAD_TOP + EB_PAD_BOTTOM
+    rectById.set(expandedId, { x, y, w, h })
+
+    boundaries.push({
+      id: `${EXPAND_BOUNDARY_PREFIX}${expandedId}`,
+      type: 'boundary',
+      position: { x, y },
+      measured: { width: w, height: h },
+      style: { width: w, height: h, pointerEvents: 'none' },
+      data: { name: info.name, typeLabel, collapsible: true, elementId: expandedId },
+      // Deeper boxes sit above their parent box but still behind content (>= 0).
+      zIndex: -5 + depthOf(expandedId),
+      selectable: false,
+      // Draggable via the header handle only (body is pointer-transparent so
+      // child content nodes stay interactive). Dragging translates the whole
+      // expanded subtree — Canvas.onNodeDragStart wires the members.
+      draggable: true,
+      dragHandle: '.c4-overlay-drag-handle',
+      focusable: false,
+    })
+  }
+
+  return boundaries
+}
+
+/** Build edges using final node positions for optimal handle routing. */
+export function buildEdges(
+  workspace: Workspace,
+  view: View,
+  nodes: Node[],
+  filters: HighlightFilters,
+): Edge[] {
+  const relationshipMap = buildRelationshipMap(workspace)
+  const relationshipStyles = workspace.views.configuration.styles.relationships
+
+  // Position lookup from laid-out nodes
+  const posMap = new Map<string, { x: number; y: number }>()
+  for (const n of nodes) posMap.set(n.id, n.position)
+
+  const viewElementIds = new Set(view.elements.map((e) => e.id))
+
+  const edgeInfos: EdgeInfo[] = []
+  for (const viewRel of view.relationships) {
+    const rel = relationshipMap.get(viewRel.id)
+    if (!rel) continue
+    if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
+    edgeInfos.push(makeEdgeInfo(rel, rel.sourceId, rel.destinationId, posMap, relationshipStyles))
+  }
+
+  return assembleEdges(edgeInfos, posMap, nodes, filters)
+}
+
+/** Build a child→parent id map for the whole model (container→system,
+ *  component→container). People and systems have no parent. */
+function buildParentMap(workspace: Workspace): Map<string, string> {
+  const parentOf = new Map<string, string>()
+  for (const sys of workspace.model.softwareSystems) {
+    for (const container of sys.containers) {
+      parentOf.set(container.id, sys.id)
+      for (const component of container.components) {
+        parentOf.set(component.id, container.id)
+      }
+    }
+  }
+  return parentOf
+}
+
+/**
+ * Expand-in-place edges. For each model relationship a→b, resolve both
+ * endpoints to the node that should carry the edge by walking UP from the
+ * endpoint until we hit either:
+ *   • an *expanded* element — its own node was replaced by its children, but it
+ *     is drawn as a wrapper boundary box. The edge attaches to that box so a
+ *     parent-level relationship (e.g. A→B) stays at the parent level when B is
+ *     expanded, instead of diving onto a child container. Both endpoints
+ *     expanded → boundary→boundary.
+ *   • a *visible* content node — a leaf, or the nearest visible ancestor of a
+ *     collapsed element (the box it folds into).
+ * Relationships that resolve to the same node (internal to one box) are dropped;
+ * duplicate pairs bundle so one edge can summarize ×N finest relationships.
+ */
+export function buildCompositeEdges(
+  workspace: Workspace,
+  nodes: Node[],
+  filters: HighlightFilters,
+): Edge[] {
+  const relationshipStyles = workspace.views.configuration.styles.relationships
+  const parentOf = buildParentMap(workspace)
+
+  // Visible ids = content nodes (those carrying a model element). Expanded ids =
+  // elements drawn as a wrapper boundary box (`__expand_boundary__<id>`).
+  const visibleIds = new Set<string>()
+  const expandedIds = new Set<string>()
+  const posMap = new Map<string, { x: number; y: number }>()
+  for (const n of nodes) {
+    posMap.set(n.id, n.position)
+    if (n.id.startsWith(EXPAND_BOUNDARY_PREFIX)) {
+      expandedIds.add(n.id.slice(EXPAND_BOUNDARY_PREFIX.length))
+      continue
+    }
+    // Hidden own-nodes of childless expanded elements stay in the graph (to
+    // preserve position) but aren't rendered — exclude them so edges resolve to
+    // the wrapper boundary, not an invisible box.
+    if (!n.hidden && (n.data as { element?: ModelElement })?.element) visibleIds.add(n.id)
+  }
+
+  // Hierarchy depth of a model element (system/person = 0, container = 1, …).
+  const depthOf = (id: string): number => {
+    let d = 0
+    let cur = parentOf.get(id)
+    while (cur !== undefined) { d++; cur = parentOf.get(cur) }
+    return d
+  }
+
+  // Walk up from `id`, ignoring ancestors deeper than `maxDepth`, and return the
+  // deepest expanded (→ wrapper box) or visible node at/under that depth.
+  const resolveAtMaxDepth = (id: string, maxDepth: number): string | null => {
+    let cur: string | undefined = id
+    while (cur !== undefined) {
+      if (depthOf(cur) <= maxDepth) {
+        if (expandedIds.has(cur)) return `${EXPAND_BOUNDARY_PREFIX}${cur}`
+        if (visibleIds.has(cur)) return cur
+      }
+      cur = parentOf.get(cur)
+    }
+    return null
+  }
+
+  // Natural resolution: the deepest expanded-or-visible ancestor of the endpoint.
+  const resolveEndpoint = (id: string): string | null => resolveAtMaxDepth(id, Infinity)
+
+  // Depth of a resolved node id (strip the wrapper prefix to recover the element).
+  const resolvedDepth = (resolved: string): number =>
+    depthOf(resolved.startsWith(EXPAND_BOUNDARY_PREFIX)
+      ? resolved.slice(EXPAND_BOUNDARY_PREFIX.length)
+      : resolved)
+
+  const byPair = new Map<string, EdgeInfo>()
+  const edgeInfos: EdgeInfo[] = []
+  for (const rel of workspace.model.relationships) {
+    // Resolve each endpoint naturally, then equalize: a relationship is always
+    // drawn between equal C4 levels. If one side folds up to a shallower box
+    // (collapsed ancestor) while the other stays deep (expanded, child visible),
+    // fold the deeper side up to the shallower's level too — so A1→B1 shows as
+    // A→B (wrapper) when A is collapsed, never as a cross-level A→B1.
+    const s0 = resolveEndpoint(rel.sourceId)
+    const t0 = resolveEndpoint(rel.destinationId)
+    if (!s0 || !t0) continue
+    const target = Math.min(resolvedDepth(s0), resolvedDepth(t0))
+    const s = resolveAtMaxDepth(rel.sourceId, target)
+    const t = resolveAtMaxDepth(rel.destinationId, target)
+    if (!s || !t || s === t) continue
+    const key = `${s}->${t}`
+    const existing = byPair.get(key)
+    if (existing) {
+      existing.bundleCount = (existing.bundleCount ?? 1) + 1
+      continue
+    }
+    const info = makeEdgeInfo(rel, s, t, posMap, relationshipStyles)
+    info.bundleCount = 1
+    byPair.set(key, info)
+    edgeInfos.push(info)
+  }
+
+  return assembleEdges(edgeInfos, posMap, nodes, filters)
 }
