@@ -42,12 +42,14 @@ import {
   buildBoundaryLayoutClusters,
   buildElementStyleIndex,
   buildExpandBoundaryNodes,
+  computeExpandBoundaryRects,
+  buildParentMap,
   EXPAND_BOUNDARY_PREFIX,
 } from './canvasBuilders'
 import { highlightActive } from '@/lib/highlight'
 import { canConnectElements } from '@/lib/connectionValidation'
 import { expandComposite } from '@/lib/expandComposite'
-import { axisForDirection, gapShiftMany } from '@/lib/expandLayout'
+import { axisForDirection, gapShiftMany, gapShiftCross, gapShiftCrossRect, EXPAND_MARGIN } from '@/lib/expandLayout'
 import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
@@ -145,9 +147,9 @@ function isOverlayNode(node: Pick<Node, 'id' | 'type'>): boolean {
 function isExpandedChildNode(
   node: Node,
   view: View | null | undefined,
-  expandedIds: string[],
+  expandedIds: Set<string>,
 ): boolean {
-  if (expandedIds.length === 0 || isOverlayNode(node)) return false
+  if (expandedIds.size === 0 || isOverlayNode(node)) return false
   if (!node.data || !('element' in node.data)) return false
   return !(view?.elements.some((e) => e.id === node.id) ?? false)
 }
@@ -175,8 +177,58 @@ function sameOverlayGeometry(a: Node, b: Node): boolean {
   return samePosition && sameSize && sameState && sameData
 }
 
-function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, nodes: Node[], expandedIds: Set<string> = new Set()): Node[] {
-  const contentOnly = nodes.filter((n) => !isOverlayNode(n))
+/** Push outside siblings clear of every expanded wrapper's ACTUAL rect (member
+ *  bbox + pads, the same rect the boundary is drawn from). Members of any wrapper
+ *  and the actively-dragged node are excluded — so a wrapper's own children stay
+ *  put and the user can still place a sibling by hand. Used by both the layout
+ *  memo (on expand) and the live drag rebuild (so dragging a child outward, which
+ *  grows the wrapper, slides overlapping siblings away in real time). */
+function pushSiblingsClearOfWrappers(
+  contentNodes: Node[],
+  expandedIds: Set<string>,
+  workspace: Workspace,
+  direction: string,
+  draggedId?: string,
+): Node[] {
+  if (expandedIds.size === 0) return contentNodes
+  const realRects = computeExpandBoundaryRects(contentNodes, expandedIds, workspace)
+  if (realRects.size === 0) return contentNodes
+
+  const axis = axisForDirection(direction)
+  const parentOf = buildParentMap(workspace)
+  const hasExpandedAncestor = (id: string): boolean => {
+    let cur = parentOf.get(id)
+    while (cur !== undefined) {
+      if (expandedIds.has(cur)) return true
+      cur = parentOf.get(cur)
+    }
+    return false
+  }
+  const excludeIds = new Set(
+    contentNodes
+      .filter((n) => expandedIds.has(n.id) || hasExpandedAncestor(n.id))
+      .map((n) => n.id),
+  )
+  if (draggedId) excludeIds.add(draggedId)
+
+  let pushed = contentNodes.map((n) => ({
+    id: n.id,
+    position: n.position,
+    width: n.measured?.width ?? (Number(n.style?.width) || 200),
+    height: n.measured?.height ?? (Number(n.style?.height) || 100),
+  }))
+  for (const rect of realRects.values()) {
+    pushed = gapShiftCrossRect(pushed, rect, axis, excludeIds)
+  }
+  const pushedById = new Map(pushed.map((n) => [n.id, n.position]))
+  return contentNodes.map((n) => ({ ...n, position: pushedById.get(n.id) ?? n.position }))
+}
+
+function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, nodes: Node[], expandedIds: Set<string> = new Set(), draggedId?: string): Node[] {
+  const rawContent = nodes.filter((n) => !isOverlayNode(n))
+  // Push outside siblings clear of any wrapper grown by a dragged-out child, so
+  // overlays (and the returned content) reflect the final positions.
+  const contentOnly = pushSiblingsClearOfWrappers(rawContent, expandedIds, workspace, view?.autoLayout?.direction ?? 'TB', draggedId)
   const previousOverlays = new Map(nodes.filter(isOverlayNode).map((n) => [n.id, n]))
   const boundaryClusters = view ? buildBoundaryLayoutClusters(workspace, view) : []
   const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters)
@@ -425,19 +477,26 @@ export default function Canvas() {
       // Sizing pass: how much each top-level expanded box grows vs 200×100.
       const { growth } = expandComposite(laidOut, expandCtx)
       const axis = axisForDirection(direction)
-      const shifts = growth.map((g) => ({
-        expandedId: g.expandedId,
-        delta: axis === 'x' ? Math.max(0, g.width - 200) : Math.max(0, g.height - 100),
-      }))
+      // Primary (flow) axis: open a gap so following ranks slide down/across,
+      // plus EXPAND_MARGIN so the next rank isn't flush against the grown box.
+      const primaryShifts = growth.map((g) => {
+        const grow = axis === 'x' ? Math.max(0, g.width - 200) : Math.max(0, g.height - 100)
+        return { expandedId: g.expandedId, delta: grow > 0 ? grow + EXPAND_MARGIN : 0 }
+      })
       const layoutNodesForShift = laidOut.map((n) => ({
         id: n.id,
         position: n.position,
         width: n.measured?.width ?? (Number(n.style?.width) || 200),
         height: n.measured?.height ?? (Number(n.style?.height) || 100),
       }))
-      const shiftedById = new Map(
-        gapShiftMany(layoutNodesForShift, shifts, axis).map((n) => [n.id, n.position]),
-      )
+      let shifted = gapShiftMany(layoutNodesForShift, primaryShifts, axis)
+      // Cross axis: push any sibling that overlaps a grown box's footprint clear
+      // of it. Covers same-rank neighbours the flow-axis shift never touched and
+      // siblings the user dragged near/onto the box.
+      for (const g of growth) {
+        shifted = gapShiftCross(shifted, g.expandedId, g.width, g.height, axis)
+      }
+      const shiftedById = new Map(shifted.map((n) => [n.id, n.position]))
       const shiftedLaidOut = laidOut.map((n) => ({ ...n, position: shiftedById.get(n.id) ?? n.position }))
       expandedNodes = expandComposite(shiftedLaidOut, expandCtx).nodes
 
@@ -453,6 +512,16 @@ export default function Canvas() {
             : n
         })
       }
+
+      // Final collision pass against the ACTUAL wrapper rects. The pre-expand
+      // gapShiftCross sized the push from dagre's *predicted* growth, but the
+      // rendered wrapper is sized to the real (possibly user-dragged) child
+      // positions applied above — so a child dragged outward grows the wrapper
+      // past the prediction and a sibling can stay overlapping it. Push any
+      // sibling fully clear of each box's true rect (same source as the drawn
+      // boundary). Members are excluded so a wrapper's own children aren't shoved
+      // out of their own wrapper.
+      expandedNodes = pushSiblingsClearOfWrappers(expandedNodes, new Set(expandedElementIds), workspace, direction)
     }
 
     // 4. Build group background nodes and scope boundary using post-layout positions
@@ -876,7 +945,7 @@ export default function Canvas() {
         })
         const ws = workspaceRef.current
         if (!ws || ctx.memberStart.size === 0) return moved
-        return rebuildNodesWithOverlays(ws, viewRef.current, moved, expandedIdsRef.current)
+        return rebuildNodesWithOverlays(ws, viewRef.current, moved, expandedIdsRef.current, ctx.nodeId)
       })
       return
     }
@@ -885,7 +954,7 @@ export default function Canvas() {
     if (!ws || isOverlayNode(node)) return
     setNodes((prev) => {
       const moved = prev.map((n) => n.id === node.id ? { ...n, position: node.position } : n)
-      return rebuildNodesWithOverlays(ws, viewRef.current, moved, expandedIdsRef.current)
+      return rebuildNodesWithOverlays(ws, viewRef.current, moved, expandedIdsRef.current, node.id)
     })
   }, [setNodes])
 
