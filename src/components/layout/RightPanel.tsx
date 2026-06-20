@@ -5,6 +5,7 @@ import { formatImpactSummary } from '@/lib/impactMessage'
 import type { ModelElement, Container, Component, Person, SoftwareSystem, Relationship, ElementStatus, Location } from '@/types/model'
 import { X, Plus, ArrowRight, ExternalLink, Eye, EyeOff, ChevronRight, Trash2 } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
+import { CHANGE_STATES, CHANGESTATE_COLORS, changeStateOf, withChangeState, type ChangeState } from '@/lib/changeState'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
@@ -29,6 +30,60 @@ const LINE_STYLE_OPTIONS = [
   { value: 'Straight' as const, label: 'Straight', shortLabel: 'Straight' },
   { value: 'Orthogonal' as const, label: 'Orthogonal', shortLabel: 'Orthogonal' },
 ]
+
+const CHANGE_STATE_OPTIONS: { value: ChangeState | undefined; label: string }[] = [
+  { value: undefined, label: 'None' },
+  ...CHANGE_STATES.map((state) => ({ value: state, label: state })),
+]
+
+/** Button-group selector for changeState (the state of a thing in a change
+ *  diagram). Mirrors the Status control; shared by element + relationship
+ *  panels. `variant` picks the legend dot colour (element fill vs line). */
+function ChangeStateField({ tags, variant, onChange }: {
+  tags: string[]
+  variant: 'element' | 'relationship'
+  onChange: (next: ChangeState | undefined) => void
+}) {
+  const current = changeStateOf(tags)
+  return (
+    <div>
+      <FieldLabel>Change</FieldLabel>
+      <div className="flex flex-wrap gap-1" data-testid="change-state">
+        {CHANGE_STATE_OPTIONS.map((opt) => {
+          const active = current === opt.value
+          const dot = opt.value ? CHANGESTATE_COLORS[opt.value][variant] : null
+          return (
+            <button
+              key={opt.label}
+              onClick={() => onChange(opt.value)}
+              aria-pressed={active}
+              aria-label={`Change: ${opt.label}`}
+              className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors"
+              style={{
+                background: active ? 'var(--color-accent-active)' : 'var(--color-surface-2)',
+                borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: dot ?? 'transparent',
+                  border: dot ? '1px solid rgba(255,255,255,0.2)' : '1px dashed var(--color-border)',
+                  flexShrink: 0,
+                }}
+              />
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 type PanelTab = 'properties' | 'relations' | 'tags'
 
@@ -269,6 +324,13 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
                 })}
               </div>
             </div>
+
+            {/* Change state */}
+            <ChangeStateField
+              tags={element.tags}
+              variant="element"
+              onChange={(next) => updateElement(element.id, { tags: withChangeState(element.tags, next) })}
+            />
 
             {/* Owner */}
             <div>
@@ -541,6 +603,11 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
             )}
           </div>
         </div>
+        <ChangeStateField
+          tags={relationship.tags}
+          variant="relationship"
+          onChange={(next) => updateRelationship(relationship.id, { tags: withChangeState(relationship.tags, next) })}
+        />
         <div>
           <FieldLabel>Tags</FieldLabel>
           <TagsTab tags={relationship.tags} onUpdate={(tags) => updateRelationship(relationship.id, { tags })} />

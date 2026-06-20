@@ -9,6 +9,7 @@ import {
 } from '@/lib/canvasLayout'
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship } from '@/types/model'
 import { EMPTY_EXPAND_W, EMPTY_EXPAND_H } from '@/lib/expandComposite'
+import { CHANGESTATE_ELEMENT_STYLES, CHANGESTATE_RELATIONSHIP_STYLES } from '@/lib/changeState'
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
 function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
@@ -92,7 +93,17 @@ export function buildElementStyleIndex(
   const workspaceStyles = workspace.views.configuration.styles.elements
     .map(stripThemeManagedStyleFields)
     .filter((style): style is ElementStyle => style !== null)
-  return buildStyleIndex([...themeStyles, ...workspaceStyles])
+  // changeState styles ship built-in (render-only, never serialized) so a
+  // reserved tag paints instantly. Placed first so theme/workspace styles for
+  // the same tag could still override, should a user ever customize one.
+  return buildStyleIndex([...CHANGESTATE_ELEMENT_STYLES, ...themeStyles, ...workspaceStyles])
+}
+
+/** Relationship styles with the built-in changeState styles layered underneath
+ *  (render-only, never serialized). Relationships have no theme layer, so this
+ *  is the only built-in base. Workspace styles come last and override. */
+export function buildRelationshipStyleList(workspace: Workspace): RelationshipStyle[] {
+  return [...CHANGESTATE_RELATIONSHIP_STYLES, ...workspace.views.configuration.styles.relationships]
 }
 
 export interface ContentNodeContext {
@@ -832,7 +843,7 @@ export function buildEdges(
   filters: HighlightFilters,
 ): Edge[] {
   const relationshipMap = buildRelationshipMap(workspace)
-  const relationshipStyles = workspace.views.configuration.styles.relationships
+  const relationshipStyles = buildRelationshipStyleList(workspace)
 
   // Position lookup from laid-out nodes
   const posMap = new Map<string, { x: number; y: number }>()
@@ -885,7 +896,7 @@ export function buildCompositeEdges(
   nodes: Node[],
   filters: HighlightFilters,
 ): Edge[] {
-  const relationshipStyles = workspace.views.configuration.styles.relationships
+  const relationshipStyles = buildRelationshipStyleList(workspace)
   const parentOf = buildParentMap(workspace)
 
   // Visible ids = content nodes (those carrying a model element). Expanded ids =
