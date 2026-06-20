@@ -6,6 +6,7 @@ import type { ModelElement, Container, Component, Person, SoftwareSystem, Relati
 import { X, Plus, ArrowRight, ExternalLink, Eye, EyeOff, ChevronRight, Trash2 } from 'lucide-react'
 import { TYPE_COLORS, getElementTypeLabel } from '@/lib/elementMeta'
 import { CHANGE_STATES, CHANGESTATE_COLORS, changeStateOf, withChangeState, type ChangeState } from '@/lib/changeState'
+import { isReservedTag } from '@/store/builtin-tags'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
@@ -672,21 +673,21 @@ function ElementRelationsTab({ elementId }: { elementId: string }) {
 
 // ─── Tags Tab ────────────────────────────────────────────────────────
 
-const BUILT_IN_TAGS = new Set(['Element', 'Person', 'Software System', 'Container', 'Component', 'Database', 'Relationship'])
-
 function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]) => void }) {
   const [newTag, setNewTag] = useState('')
 
   const addTag = useCallback(() => {
     const trimmed = newTag.trim()
-    if (trimmed && !tags.includes(trimmed)) {
+    // Reserved tags (built-in types + change states) are owned by their
+    // dedicated controls — never hand-added here.
+    if (trimmed && !isReservedTag(trimmed) && !tags.includes(trimmed)) {
       onUpdate([...tags, trimmed])
       setNewTag('')
     }
   }, [newTag, tags, onUpdate])
 
   const removeTag = (tag: string) => {
-    if (BUILT_IN_TAGS.has(tag)) return
+    if (isReservedTag(tag)) return
     onUpdate(tags.filter((t) => t !== tag))
   }
 
@@ -695,7 +696,7 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((tag) => {
-            const isBuiltIn = BUILT_IN_TAGS.has(tag)
+            const isBuiltIn = isReservedTag(tag)
             return (
               <span
                 key={tag}
