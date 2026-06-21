@@ -30,7 +30,7 @@ test.describe('highlighter bar', () => {
     // load the flyout list re-renders, and a bare click raced the detach.
     const customerChip = flyout.getByRole('button', { name: /^Customer\b/, exact: false })
     await expect(customerChip).toBeVisible()
-    await customerChip.click({ force: true })
+    await customerChip.click()
     await expect(workspace.page.getByLabel('Element properties')).toBeVisible()
   })
 
