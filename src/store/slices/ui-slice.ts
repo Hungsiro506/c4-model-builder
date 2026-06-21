@@ -7,6 +7,7 @@ export type UiSlice = Pick<WorkspaceState,
   | 'leftPanelOpen' | 'rightPanelOpen'
   | 'searchOpen' | 'commandPaletteOpen'
   | 'canvasSettingsOpen' | 'canvasGuideOpen' | 'addElementPanelOpen' | 'highlighterOpenFacet'
+  | 'editingRelationshipId' | 'setEditingRelationship'
   | 'viewsPanelOpen' | 'createViewDialogOpen'
   | 'pendingDelete' | 'confirmDelete' | 'cancelDelete'
   | 'presentationMode' | 'setPresentationMode'
@@ -33,6 +34,7 @@ export const createUiSlice: StateCreator<
   canvasSettingsOpen: false,
   canvasGuideOpen: false,
   addElementPanelOpen: false,
+  editingRelationshipId: null,
   highlighterOpenFacet: null,
   viewsPanelOpen: false,
   createViewDialogOpen: false,
@@ -53,6 +55,7 @@ export const createUiSlice: StateCreator<
   setCanvasSettingsOpen: (open) => set({ canvasSettingsOpen: open, commandPaletteOpen: false }),
   setCanvasGuideOpen: (open) => set({ canvasGuideOpen: open, commandPaletteOpen: false }),
   setAddElementPanelOpen: (open) => set({ addElementPanelOpen: open, commandPaletteOpen: false }),
+  setEditingRelationship: (id) => set({ editingRelationshipId: id }),
   setHighlighterOpenFacet: (facet) => set({ highlighterOpenFacet: facet, commandPaletteOpen: false }),
   setViewsPanelOpen: (open) => set({ viewsPanelOpen: open }),
   toggleViewsPanel: () => set((s) => { s.viewsPanelOpen = !s.viewsPanelOpen }),

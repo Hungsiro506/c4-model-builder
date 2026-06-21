@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useState, useRef, useEffect } from 'react'
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -9,6 +9,7 @@ import {
   type EdgeProps,
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
+import { useWorkspaceStore } from '@/store/workspace'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
 
 interface RelationshipEdgeData {
@@ -53,6 +54,37 @@ function RelationshipEdge({
   const relStyle = data?.relationshipStyle
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
+
+  // Inline description editing (double-click an edge). The edit toggle lives in
+  // the store (set by Canvas.onEdgeDoubleClick / the label's own dblclick) so it
+  // survives edge rebuilds; the draft + focus are local.
+  const isEditing = useWorkspaceStore((s) => s.editingRelationshipId === id)
+  const updateRelationship = useWorkspaceStore((s) => s.updateRelationship)
+  const setEditingRelationship = useWorkspaceStore((s) => s.setEditingRelationship)
+  const [draft, setDraft] = useState('')
+  const editInputRef = useRef<HTMLInputElement>(null)
+  // Escape clears the edit, which unmounts the input and can fire onBlur — this
+  // guard stops that blur from committing the discarded draft.
+  const skipBlurRef = useRef(false)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (isEditing) setDraft(relationship?.description ?? '')
+  }, [isEditing, relationship?.description])
+  useEffect(() => {
+    if (isEditing) { editInputRef.current?.focus(); editInputRef.current?.select() }
+  }, [isEditing])
+  const commitEdit = () => {
+    if (skipBlurRef.current) { skipBlurRef.current = false; return }
+    if (relationship) {
+      const trimmed = draft.trim()
+      updateRelationship(relationship.id, { description: trimmed || undefined })
+    }
+    setEditingRelationship(null)
+  }
+  const cancelEdit = () => {
+    skipBlurRef.current = true
+    setEditingRelationship(null)
+  }
 
   const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
   const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
@@ -137,12 +169,51 @@ function RelationshipEdge({
         markerStart={selected ? 'url(#c4-dot-selected)' : 'url(#c4-dot)'}
         markerEnd={selected ? 'url(#c4-arrow-selected)' : 'url(#c4-arrow)'}
       />
+      {/* Inline description editor (double-click an edge or its label) */}
+      {isEditing && (
+        <EdgeLabelRenderer>
+          <input
+            ref={editInputRef}
+            className="nodrag nopan"
+            aria-label="Relationship description"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
+              else if (e.key === 'Escape') { e.preventDefault(); cancelEdit() }
+              e.stopPropagation()
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            placeholder="Describe relationship…"
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              pointerEvents: 'all',
+              zIndex: 10,
+              fontSize: 11,
+              padding: '3px 8px',
+              borderRadius: 6,
+              border: '1px solid var(--canvas-selection, var(--color-accent))',
+              background: 'var(--color-bg-panel, var(--color-bg-primary))',
+              color: 'var(--color-text-primary)',
+              outline: 'none',
+              minWidth: 120,
+              maxWidth: FULL_LABEL_MAX_WIDTH,
+              textAlign: 'center',
+            }}
+          />
+        </EdgeLabelRenderer>
+      )}
       {/* Label — shown when either description or technology is present */}
-      {(relationship?.description || relationship?.technology) && (
+      {!isEditing && (relationship?.description || relationship?.technology) && (
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto"
             data-label-density={labelDensity}
+            title="Double-click to edit"
+            onDoubleClick={(e) => { e.stopPropagation(); setEditingRelationship(id) }}
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
