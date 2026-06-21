@@ -25,7 +25,14 @@ test.describe('highlighter bar', () => {
 
     await workspace.page.getByTestId('highlighter-segment-tags').click()
     const flyout = workspace.page.getByRole('dialog', { name: /Highlight by Tag/ })
-    await flyout.getByRole('button', { name: /^Customer\b/, exact: false }).click({ force: true })
+    await expect(flyout).toBeVisible()
+    // Wait for the chip to be present + settled before clicking — under parallel
+    // load the flyout list re-renders, and a bare click raced the detach.
+    const customerChip = flyout.getByRole('button', { name: /^Customer\b/, exact: false })
+    await expect(customerChip).toBeVisible()
+    // force: load-bearing — the chip re-renders constantly, so it never reaches
+    // Playwright's "stable" gate; a non-force click times out (even serial).
+    await customerChip.click({ force: true })
     await expect(workspace.page.getByLabel('Element properties')).toBeVisible()
   })
 
