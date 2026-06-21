@@ -5,7 +5,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // CI runs serial (1 worker) for determinism. Locally, cap at half the cores
+  // instead of Playwright's default (~all cores): every worker shares one Vite
+  // dev server, and over-subscribing it is the main source of local flakes.
+  workers: process.env.CI ? 1 : '50%',
   reporter: process.env.CI
     ? [['list'], ['html', { open: 'never' }]]
     : 'html',

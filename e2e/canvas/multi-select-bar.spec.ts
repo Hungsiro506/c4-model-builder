@@ -396,7 +396,7 @@ async function setActiveViewPositions(
     const store = (window as unknown as { __testStore?: () => S }).__testStore?.()
     store?.updateNodePositions(updates)
   }, positions)
-  await page.waitForTimeout(250)
+  await waitForNodesStable(page)
 }
 
 async function getNodeBox(page: import('@playwright/test').Page, id: string) {
@@ -425,7 +425,41 @@ async function selectNodes(
 async function clickAlignAction(page: import('@playwright/test').Page, name: string) {
   await page.locator('button[title="Align elements"]').click()
   await page.getByRole('button', { name }).click()
-  await page.waitForTimeout(300)
+  // Wait for the re-layout to actually settle before callers read pixel
+  // positions — a fixed timeout flakes under parallel load.
+  await waitForNodesStable(page)
+}
+
+/** Resolve once every rendered node's transform stops changing across a few
+ *  animation frames (with a safety cap). Replaces fixed timeouts so geometry
+ *  assertions read settled positions regardless of machine load. */
+async function waitForNodesStable(page: import('@playwright/test').Page) {
+  await page.locator('.react-flow__viewport').evaluate(
+    (el) =>
+      new Promise<void>((resolve) => {
+        let last = ''
+        let stableFrames = 0
+        let frames = 0
+        const read = () =>
+          Array.from(el.querySelectorAll('.react-flow__node'))
+            .map((n) => (n as HTMLElement).style.transform)
+            .join('|')
+        const check = () => {
+          frames += 1
+          const cur = read()
+          if (cur === last) {
+            stableFrames += 1
+            if (stableFrames >= 3) { resolve(); return }
+          } else {
+            stableFrames = 0
+            last = cur
+          }
+          if (frames > 180) { resolve(); return } // ~3s safety cap
+          requestAnimationFrame(check)
+        }
+        requestAnimationFrame(check)
+      }),
+  )
 }
 
 async function getSortedNodeBoxes(
