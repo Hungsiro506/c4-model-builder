@@ -2,7 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import { pushUndoSnapshot } from '../internals'
 import { forEachElementHelper } from '../workspace-helpers'
-import { BUILTIN_TAGS } from '../builtin-tags'
+import { isReservedTag } from '../builtin-tags'
 
 export type TagStyleSlice = Pick<WorkspaceState,
   | 'updateElementStyle' | 'removeElementStyle'
@@ -44,8 +44,8 @@ export const createTagStyleSlice: StateCreator<
 
   renameTag: (oldTag, newTag) => set((s) => {
     if (!newTag.trim() || oldTag === newTag) return
-    if (BUILTIN_TAGS.has(oldTag)) return // Built-in tags cannot be renamed
-    if (BUILTIN_TAGS.has(newTag.trim())) return // Cannot rename a custom tag to a built-in name
+    if (isReservedTag(oldTag)) return // Reserved tags cannot be renamed
+    if (isReservedTag(newTag.trim())) return // Cannot rename a custom tag onto a reserved name
     if (!s.workspace) return
     const ws = s.workspace
     // Quick existence check before doing any mutation
@@ -65,7 +65,7 @@ export const createTagStyleSlice: StateCreator<
   }),
 
   removeTagGlobal: (tag) => set((s) => {
-    if (BUILTIN_TAGS.has(tag)) return // Built-in tags cannot be removed
+    if (isReservedTag(tag)) return // Reserved tags cannot be removed
     if (!s.workspace) return
     const ws = s.workspace
     let exists = ws.views.configuration.styles.elements.some(es => es.tag === tag)

@@ -4,6 +4,7 @@ import { useBreakpoint } from '@/hooks/useBreakpoint'
 import type { ModelElement } from '@/types/model'
 import { scopeAllowsContainers } from '@/lib/scopeValidation'
 import { TYPE_ICONS, TYPE_COLORS, TYPE_LABELS } from '@/lib/elementMeta'
+import { CHANGE_STATES, CHANGESTATE_COLORS, withChangeState } from '@/lib/changeState'
 import {
   UserRound,
   Globe,
@@ -249,6 +250,33 @@ export default function AddElementPanel({ onClose }: { onClose: () => void }) {
                   />
                 ))}
               </div>
+              {creatableTypes.canCreateSystem && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="flyout-label" style={{ marginBottom: 5 }}>
+                    Changes
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {CHANGE_STATES.map((state) => (
+                      <CreateChip
+                        key={state}
+                        icon={<Globe size={16} />}
+                        label={`${state} System`}
+                        color={CHANGESTATE_COLORS[state].element}
+                        onClick={() => {
+                          // Shortcut: create a system, then set the Change tag.
+                          // updateElementLive (no undo push) keeps the create +
+                          // tag as a single undo step.
+                          const id = useWorkspaceStore.getState().addSoftwareSystem(`${state} System`)
+                          useWorkspaceStore.getState().updateElementLive(id, {
+                            tags: withChangeState(['Element', 'Software System'], state),
+                          })
+                          afterAdd()
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
               {creatableTypes.canCreateContainer !== null && containersAllowed && (
                 <div style={{ marginTop: 8 }}>
                   <div

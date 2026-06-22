@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Plus, Tag as TagIcon, X } from 'lucide-react'
 import DialogShell from '@/components/shared/DialogShell'
 import { useWorkspaceStore, buildElementMap, BUILTIN_TAGS } from '@/store/workspace'
+import { isChangeStateTag } from '@/lib/changeState'
 import type { ElementStyle } from '@/types/model'
 import { ColorPicker } from '../tagStyleControls'
 import {
@@ -31,10 +32,14 @@ export default function TagManagerDialog({ onClose }: { onClose: () => void }) {
     if (!workspace) return Array.from(tagSet)
     for (const el of elementMap.values()) {
       for (const tag of (el as { tags: string[] }).tags) {
-        if (!DEFAULT_BUILTIN_TAGS.includes(tag)) tagSet.add(tag)
+        // Change-state tags are reserved — owned by the Change control, never
+        // shown here (their colours are render-only, so a row would be blank).
+        if (!DEFAULT_BUILTIN_TAGS.includes(tag) && !isChangeStateTag(tag)) tagSet.add(tag)
       }
     }
-    for (const s of workspace.views.configuration.styles.elements) tagSet.add(s.tag)
+    for (const s of workspace.views.configuration.styles.elements) {
+      if (!isChangeStateTag(s.tag)) tagSet.add(s.tag)
+    }
     return Array.from(tagSet)
   }, [workspace, elementMap])
 

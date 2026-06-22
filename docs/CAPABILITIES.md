@@ -19,6 +19,7 @@ supports." When planning to scale, use it to judge what to reuse, change, or rem
 | Group elements together (ad-hoc clusters across types) | `src/types/model.ts`, `src/components/layout/right-panel/GroupProperties.tsx` |
 | Mark a Person or System as Internal / External | `src/components/layout/RightPanel.tsx`, `src/lib/dsl/parser-model.ts` |
 | Set element status: Live / Planned / Deprecated / Removed | `src/components/canvas/nodes/StatusDot.tsx`, `src/components/layout/RightPanel.tsx` |
+| Mark **change state** for change diagrams — New / Modified / Unchanged / Removed (elements **and** relationships), auto-coloured with the gap-analysis traffic-light palette. Stored as reserved tags; styles are render-only so files round-trip as plain Structurizr. Orthogonal to location/status. | `src/lib/changeState.ts`, `src/components/layout/RightPanel.tsx`, `src/components/canvas/canvasBuilders.ts` |
 | Record owner / team, technology, URL on elements | `src/components/layout/right-panel/fields.tsx` |
 | Parent-level relationships shown automatically (implied) | `src/lib/impliedRelationships.ts` |
 
@@ -63,9 +64,9 @@ supports." When planning to scale, use it to judge what to reuse, change, or rem
 
 | Capability | Where |
 |---|---|
-| Edit an element: name, location, status, owner, URL, technology, description, tags | `src/components/layout/RightPanel.tsx` |
+| Edit an element: name, location, status, change state, owner, URL, technology, description, tags | `src/components/layout/RightPanel.tsx` |
 | See an element's incoming/outgoing relationships | `src/components/layout/RightPanel.tsx` (Relations tab) |
-| Edit a relationship: description, technology, interaction style, line style (curved/straight/orthogonal), URL, tags | `src/components/layout/RightPanel.tsx` |
+| Edit a relationship: description, technology, interaction style, line style (curved/straight/orthogonal), change state, URL, tags | `src/components/layout/RightPanel.tsx` |
 | Edit a group: name and members | `src/components/layout/right-panel/GroupProperties.tsx` |
 | Create relationships by dragging from one node to another; reconnect endpoints | `src/store/slices/relationship-slice.ts` |
 
@@ -76,6 +77,7 @@ supports." When planning to scale, use it to judge what to reuse, change, or rem
 | Capability | Where |
 |---|---|
 | Add elements (quick-add by type, or pull existing-but-hidden elements in) | `src/components/layout/AddElementPanel.tsx` |
+| Drop a pre-marked change-state system in one click (New / Modified / Unchanged / Removed) from the "Changes" palette group | `src/components/layout/AddElementPanel.tsx`, `src/lib/changeState.ts` |
 | Auto-arrange layout; choose direction (top-bottom / bottom-top / left-right / right-left) | `src/components/layout/FloatingToolRail.tsx` |
 | Zoom in/out, zoom to fit, pan, minimap (always / auto / never) | `src/components/layout/FloatingZoomHud.tsx`, `src/components/settings/CanvasSettingsDialog.tsx` |
 | Snap nodes to a 32px grid | `src/components/canvas/Canvas.tsx`, `src/components/settings/CanvasSettingsDialog.tsx` |

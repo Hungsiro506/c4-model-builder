@@ -314,6 +314,28 @@ export class WorkspaceHelper {
     await this.page.getByTestId('element-status').getByRole('button', { name: `Status: ${value}` }).click()
   }
 
+  async selectChangeState(value: 'None' | 'New' | 'Modified' | 'Unchanged' | 'Removed') {
+    // Change is a button group (mirrors Status); each option's accessible name
+    // is "Change: <value>". Shared testid for element + relationship.
+    await this.page.getByTestId('change-state').getByRole('button', { name: `Change: ${value}` }).click()
+  }
+
+  /** Computed background-colour of a node's fill div (`.c4-node`), as `rgb(...)`. */
+  async getNodeFill(name: string) {
+    return this.getVisibleNodeByName(name)
+      .locator('.c4-node')
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor)
+  }
+
+  /** Computed stroke colour of the last-rendered relationship edge path. */
+  async getLastEdgeStroke() {
+    return this.page
+      .locator('.react-flow__edge .react-flow__edge-path')
+      .last()
+      .evaluate((el) => getComputedStyle(el).stroke)
+  }
+
   async toggleInspectorTab(name: 'Properties' | 'Relations' | 'Tags') {
     await this.page.getByRole('tab', { name }).click()
   }
