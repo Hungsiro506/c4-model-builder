@@ -1,0 +1,55 @@
+name: Release
+
+# Auto-create an incremented PRE-RELEASE tag + GitHub pre-release on every merge
+# to main, for deployment / version tracking. The bump is derived from
+# Conventional Commit messages since the last tag:
+#   fix:            -> patch   (v0.2.1 -> v0.2.2-rc.x)
+#   feat:           -> minor   (v0.2.1 -> v0.3.0-rc.x)
+#   feat! / BREAKING-> major   (v0.2.1 -> v1.0.0-rc.x)
+#   (no conventional commit) -> patch (default_bump)
+#
+# Marked prerelease while the project is pre-1.0 / not formally released.
+# To graduate to gated, batched, full releases later, swap this for
+# release-please (a release PR you merge) — see docs/release-automation.md.
+#
+# ── REQUIRES (owner / admin, one-time) ───────────────────────────────────────
+#   Settings → Actions → General → Workflow permissions → "Read and write
+#   permissions"  (lets GITHUB_TOKEN push tags + create releases).
+#   This workflow only runs once it is on the default branch (main).
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push tags + create releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the next version can be computed from tags
+
+      - name: Compute next pre-release version
+        id: tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          pre_release_branches: main # every merge to main => a pre-release tag
+          tag_prefix: v
+
+      - name: Create GitHub pre-release
+        if: steps.tag.outputs.new_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.new_tag }}
+          name: ${{ steps.tag.outputs.new_tag }}
+          body: ${{ steps.tag.outputs.changelog }}
+          prerelease: true

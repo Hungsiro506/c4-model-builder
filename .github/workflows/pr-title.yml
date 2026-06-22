@@ -1,0 +1,21 @@
+name: PR Title
+
+# Enforce Conventional Commit PR titles. With squash-merge, the PR title becomes
+# the commit message on main, which the release workflow parses for the version
+# bump (feat -> minor, fix -> patch, feat!/BREAKING -> major). A non-conventional
+# title would silently default the bump, so we gate it here.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
