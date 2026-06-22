@@ -1133,6 +1133,15 @@ export default function Canvas() {
     [],
   )
 
+  // Double-click an edge → edit its description inline on the canvas
+  // (RelationshipEdge renders the editor when its id matches).
+  const onEdgeDoubleClick = useCallback(
+    (_event: React.MouseEvent, edge: { id: string }) => {
+      useWorkspaceStore.getState().setEditingRelationship(edge.id)
+    },
+    [],
+  )
+
   const onNodeDragStop = useCallback(
     (_event: MouseEvent | TouchEvent, node: Node) => {
       let shouldRebuildOverlays = true
@@ -1227,6 +1236,7 @@ export default function Canvas() {
   const onPaneClick = useCallback(() => {
     if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
     clearSelection()
+    useWorkspaceStore.getState().setEditingRelationship(null)
   }, [clearSelection])
 
   const onInit = useCallback((instance: typeof reactFlowInstance) => {
@@ -1282,6 +1292,7 @@ export default function Canvas() {
         onSelectionEnd={onSelectionEnd}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
+        onEdgeDoubleClick={onEdgeDoubleClick}
         onMoveStart={onMoveStart}
         onMoveEnd={onMoveEnd}
         onNodeDragStart={onNodeDragStart}

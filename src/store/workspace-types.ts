@@ -235,6 +235,10 @@ export interface WorkspaceState extends UndoState {
   setCanvasGuideOpen: (open: boolean) => void
   addElementPanelOpen: boolean
   setAddElementPanelOpen: (open: boolean) => void
+  /** Relationship currently being edited inline on the canvas (double-click an
+   *  edge to edit its description in place). Null when no inline edit is open. */
+  editingRelationshipId: string | null
+  setEditingRelationship: (id: string | null) => void
   /** Which Highlighter facet's flyout is currently open above the bottom bar.
    *  Null when no flyout is showing (bar still visible at minimal size). */
   highlighterOpenFacet: HighlighterFacet | null
