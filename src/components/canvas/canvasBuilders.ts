@@ -10,7 +10,6 @@ import {
 import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship } from '@/types/model'
 import { EMPTY_EXPAND_W, EMPTY_EXPAND_H } from '@/lib/expandComposite'
 import { CHANGESTATE_ELEMENT_STYLES, CHANGESTATE_RELATIONSHIP_STYLES } from '@/lib/changeState'
-import { getBendHandles } from '@/lib/edgeBends'
 
 /** Build a tag → style index from the styles array (O(S) once, then O(1) lookups) */
 function buildStyleIndex(styles: ElementStyle[]): Map<string, ElementStyle> {
@@ -646,7 +645,7 @@ function assembleEdges(
       sourceHandle: `${e.sourceSide}-${srcSlot}-source`,
       targetHandle: `${e.targetSide}-${tgtSlot}-target`,
       type: 'relationship',
-      data: { relationship: e.rel, relationshipStyle: e.relStyle, highlighted, bendHandles: getBendHandles(e.edgeId) },
+      data: { relationship: e.rel, relationshipStyle: e.relStyle, highlighted },
       className,
     })
   }
