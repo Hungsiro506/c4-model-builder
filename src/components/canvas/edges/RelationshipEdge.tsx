@@ -176,25 +176,28 @@ function RelationshipEdge({
       >
         <title>{relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}</title>
       </path>
-      {/* Small dot above the label — click toggles Curved ⇄ Straight */}
-      <EdgeLabelRenderer>
-        <div
-          className="react-flow__edgeupdater nodrag nopan"
-          style={{
-            position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${(descriptionText || technologyTokens.length > 0) ? labelY - 18 : labelY}px)`,
-            pointerEvents: 'all',
-            zIndex: 5,
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            background: 'var(--canvas-selection, var(--color-accent))',
-            border: '1.5px solid #fff',
-            cursor: 'pointer',
-          }}
-          onClick={(e) => { e.stopPropagation(); onDotClick() }}
-        />
-      </EdgeLabelRenderer>
+      {/* Excalidraw-style: dot appears only when edge is selected */}
+      {selected && (
+        <EdgeLabelRenderer>
+          <div
+            className="react-flow__edgeupdater nodrag nopan"
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              pointerEvents: 'all',
+              zIndex: 15,
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              background: 'var(--canvas-selection, var(--color-accent))',
+              border: '2px solid #fff',
+              cursor: 'grab',
+              boxShadow: '0 0 0 2px rgba(0,0,0,0.3)',
+            }}
+            onClick={(e) => { e.stopPropagation(); onDotClick() }}
+          />
+        </EdgeLabelRenderer>
+      )}
       <BaseEdge
         id={id}
         path={edgePath}
