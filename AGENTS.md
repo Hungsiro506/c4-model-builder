@@ -64,6 +64,8 @@ Deterministic, no AI/ML. Manual node positions override dagre and persist in the
   L2→L3) and 2 (storage seam) shipped. Pillars 3–4 + L4 code zoom + DB table view are
   design-phase.
 - `docs/CAPABILITIES.md` — functional inventory of what's built.
+- `docs/movable-edges-plan.md` — **parked feature:** drag-to-bend edges (Excalidraw-style).
+  Read BEFORE touching edge interaction code. Captures 4 failed approaches.
 
 ## Project Rules
 
