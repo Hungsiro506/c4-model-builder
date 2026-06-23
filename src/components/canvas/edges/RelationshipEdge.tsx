@@ -176,8 +176,8 @@ function RelationshipEdge({
       >
         <title>{relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}</title>
       </path>
-      {/* Excalidraw-style: dot appears only when edge is selected */}
-      {selected && (
+      {/* Excalidraw-style: dot appears only when edge is selected (and not editing) */}
+      {selected && !isEditing && (
         <EdgeLabelRenderer>
           <div
             className="react-flow__edgeupdater nodrag nopan"
