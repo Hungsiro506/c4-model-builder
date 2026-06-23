@@ -67,6 +67,8 @@ Deterministic, no AI/ML. Manual node positions override dagre and persist in the
 - `docs/movable-edges-plan.md` — **parked feature:** drag-to-bend edges (Excalidraw-style).
   Read BEFORE touching edge interaction code. Captures 4 failed approaches and
   recommended next steps.
+- `docs/rectangle-drawing-plan.md` — **scoped, not started:** free-form rectangle drawing
+  (Excalidraw frame). Draw-first, assign-later. Ask the user about auto-assign on draw.
 
 ## Project Rules
 
