@@ -9,7 +9,6 @@ vi.mock('@xyflow/react', async () => {
     ...actual,
     BaseEdge: ({ id, path }: { id: string; path: string }) => <path data-testid={id} d={path} />,
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    useReactFlow: () => ({ updateEdgeData: vi.fn() }),
     getStraightPath: () => ['M0,0 L100,0', 50, 0],
     getSmoothStepPath: () => ['M0,0 L100,0', 50, 0],
     getBezierPath: () => ['M0,0 L100,0', 50, 0],

@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useRef, useEffect, useCallback } from 'react'
+import { memo, useMemo, useState, useRef, useEffect } from 'react'
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -11,8 +11,6 @@ import {
 import type { Relationship, RelationshipStyle } from '@/types/model'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
-// Drag-to-bend (Excalidraw-style) implementation: see edgeBends.ts and the
-// `feat/movable-edges` branch history. Currently: midpoint dot toggles line style.
 
 interface RelationshipEdgeData {
   relationship: Relationship
@@ -52,10 +50,7 @@ function RelationshipEdge({
   selected,
   style: edgeStyle,
 }: EdgeProps & { data?: RelationshipEdgeData }) {
-  // Subscribe to live store data — the prop is frozen at edge-build time.
-  const relId = (data?.relationship as { id?: string } | undefined)?.id
-  const liveRel = useWorkspaceStore((s) => relId ? s.workspace?.model.relationships.find(r => r.id === relId) : undefined)
-  const relationship = (liveRel ?? data?.relationship) as Relationship | undefined
+  const relationship = data?.relationship
   const relStyle = data?.relationshipStyle
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
@@ -91,42 +86,29 @@ function RelationshipEdge({
     setEditingRelationship(null)
   }
 
-  // Midpoint handle: single-click = toggle Curved ⇄ Straight,
-  // double-click = open inline editor. Timer distinguishes the two.
-  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onDotClick = useCallback(() => {
-    if (clickTimer.current) {
-      // Double-click → open inline editor
-      clearTimeout(clickTimer.current)
-      clickTimer.current = null
-      useWorkspaceStore.getState().setEditingRelationship(id)
-      return
-    }
-    clickTimer.current = setTimeout(() => {
-      clickTimer.current = null
-      if (!relationship) return
-      const newStyle = lineStyle === 'Straight' ? 'Curved' : 'Straight'
-      updateRelationship(relationship.id, { lineStyle: newStyle as 'Curved' | 'Straight' })
-    }, 300)
-  }, [id, lineStyle, relationship, updateRelationship])
-
   const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
   const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
 
-  // Compute custom bezier with bend offset applied to control points.
+  // Choose path function based on lineStyle
   let edgePath: string
   let labelX: number
   let labelY: number
 
   if (lineStyle === 'Straight') {
-    ;[edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY })
+    [edgePath, labelX, labelY] = getStraightPath({
+      sourceX, sourceY, targetX, targetY,
+    })
   } else if (lineStyle === 'Orthogonal') {
-    ;[edgePath, labelX, labelY] = getSmoothStepPath({
-      sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 20,
+    [edgePath, labelX, labelY] = getSmoothStepPath({
+      sourceX, sourceY, targetX, targetY,
+      sourcePosition, targetPosition,
+      borderRadius: 20,
     })
   } else {
-    ;[edgePath, labelX, labelY] = getBezierPath({
-      sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition,
+    // Default: Curved (bezier)
+    [edgePath, labelX, labelY] = getBezierPath({
+      sourceX, sourceY, targetX, targetY,
+      sourcePosition, targetPosition,
     })
   }
 
@@ -172,32 +154,10 @@ function RelationshipEdge({
         strokeWidth={24}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+        style={{ pointerEvents: 'stroke', cursor: 'text' }}
       >
         <title>{relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}</title>
       </path>
-      {/* Excalidraw-style: dot appears only when edge is selected (and not editing) */}
-      {selected && !isEditing && (
-        <EdgeLabelRenderer>
-          <div
-            className="react-flow__edgeupdater nodrag nopan"
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              pointerEvents: 'all',
-              zIndex: 15,
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              background: 'var(--canvas-selection, var(--color-accent))',
-              border: '2px solid #fff',
-              cursor: 'grab',
-              boxShadow: '0 0 0 2px rgba(0,0,0,0.3)',
-            }}
-            onClick={(e) => { e.stopPropagation(); onDotClick() }}
-          />
-        </EdgeLabelRenderer>
-      )}
       <BaseEdge
         id={id}
         path={edgePath}
@@ -264,7 +224,6 @@ function RelationshipEdge({
               borderRadius: 10,
               background: 'color-mix(in srgb, var(--canvas-bg, var(--color-bg-primary)) 82%, transparent)',
               boxShadow: '0 1px 2px color-mix(in srgb, black 12%, transparent)',
-              zIndex: 10,
               textAlign: 'center',
               lineHeight: 1.3,
               display: 'flex',
