@@ -29,12 +29,22 @@ vi.mock('@/lib/fileIO', async (importOriginal) => {
   return {
     ...mod,
     hasFileSystemAccess: () => false,
-    openDSLFile: vi.fn(),
+    openDSLFile: vi.fn(), // legacy path — no longer used by WelcomeScreen; kept for downstream test isolation
     saveDSLFile: vi.fn().mockResolvedValue(true),
     getRecentFolders: () => [],
     addRecentFolder: vi.fn(),
   }
 })
+
+// Mock storage — provides a dummy adapter so the app doesn't crash on import
+vi.mock('@/lib/storage', () => ({
+  getActiveStore: vi.fn(() => ({
+    open: vi.fn().mockResolvedValue(null),
+    save: vi.fn().mockResolvedValue({ ref: { id: 'local-file', name: 'x.dsl' }, ok: true }),
+  })),
+  createWorkspaceStore: vi.fn(),
+  replaceActiveStore: vi.fn(),
+}))
 
 // Mock folderIO — hasFolderAccess returns false (jsdom has no showDirectoryPicker)
 vi.mock('@/lib/folderIO', async (importOriginal) => {
