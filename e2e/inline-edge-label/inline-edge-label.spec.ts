@@ -74,9 +74,8 @@ test.describe('Inline edge label editing', () => {
 
   test('bare edge has a hover tooltip hinting the double-click action', async ({ workspace }) => {
     await connectedPair(workspace)
-    // The invisible wider hit-path on every edge should carry a title so users
-    // discover the double-click-edit gesture.
-    const hitPath = workspace.page.locator('.react-flow__edge path[title]').first()
-    await expect(hitPath).toHaveAttribute('title', /double.click/i)
+    // SVG <title> is a child element, not an attribute, in React 19+'s strict typings.
+    const titleEl = workspace.page.locator('.react-flow__edge path title').first()
+    await expect(titleEl).toHaveText(/double.click/i)
   })
 })

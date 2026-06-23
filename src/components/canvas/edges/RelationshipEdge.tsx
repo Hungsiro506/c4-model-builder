@@ -155,8 +155,9 @@ function RelationshipEdge({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{ pointerEvents: 'stroke', cursor: 'text' }}
-        title={relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}
-      />
+      >
+        <title>{relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}</title>
+      </path>
       <BaseEdge
         id={id}
         path={edgePath}
