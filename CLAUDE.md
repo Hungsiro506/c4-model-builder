@@ -149,8 +149,9 @@ e2e-flakes. Every AI session must follow them.
 1. **After every change run the full suite**: `npm test` (all ~1185 unit tests, not
    just the targeted file) + `npm run typecheck` + `npm run lint`.
 2. **When touching canvas/shared UI components, also run `npm run test:e2e`.**
-3. **Run commands with node on PATH**: prepend
-   `$env:PATH = "C:\Program Files\nodejs;" + $env:PATH` in every PowerShell call.
+3. **Run commands with `rtk` prefix** — the PreToolUse hook auto-wires it, but explicit
+   `rtk` in your tool calls ensures the filter runs. Node/npm must be on PATH (install
+   via your OS package manager if missing).
 4. Never edit a passing existing test just to make it green — only update it when the
    functionality genuinely changed, and say why.
 
