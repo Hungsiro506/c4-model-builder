@@ -52,7 +52,10 @@ function RelationshipEdge({
   selected,
   style: edgeStyle,
 }: EdgeProps & { data?: RelationshipEdgeData }) {
-  const relationship = data?.relationship
+  // Subscribe to live store data — the prop is frozen at edge-build time.
+  const relId = (data?.relationship as { id?: string } | undefined)?.id
+  const liveRel = useWorkspaceStore((s) => relId ? s.workspace?.model.relationships.find(r => r.id === relId) : undefined)
+  const relationship = (liveRel ?? data?.relationship) as Relationship | undefined
   const relStyle = data?.relationshipStyle
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
@@ -173,6 +176,25 @@ function RelationshipEdge({
       >
         <title>{relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}</title>
       </path>
+      {/* Small dot above the label — click toggles Curved ⇄ Straight */}
+      <EdgeLabelRenderer>
+        <div
+          className="react-flow__edgeupdater nodrag nopan"
+          style={{
+            position: 'absolute',
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${(descriptionText || technologyTokens.length > 0) ? labelY - 18 : labelY}px)`,
+            pointerEvents: 'all',
+            zIndex: 5,
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            background: 'var(--canvas-selection, var(--color-accent))',
+            border: '1.5px solid #fff',
+            cursor: 'pointer',
+          }}
+          onClick={(e) => { e.stopPropagation(); onDotClick() }}
+        />
+      </EdgeLabelRenderer>
       <BaseEdge
         id={id}
         path={edgePath}
@@ -365,36 +387,6 @@ function RelationshipEdge({
           </div>
         </EdgeLabelRenderer>
       )}
-      {/* Midpoint handle — in EdgeLabelRenderer so it's above the label */}
-      <EdgeLabelRenderer>
-        <div
-          className="react-flow__edgeupdater"
-          style={{
-            position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${(descriptionText || technologyTokens.length > 0) ? labelY - 24 : labelY}px)`,
-            width: 18,
-            height: 18,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'none',
-            zIndex: 20,
-          }}
-          onMouseDown={(e) => { e.stopPropagation(); onDotClick() }}
-        >
-          <div
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: 'var(--canvas-selection, var(--color-accent))',
-              border: '1.5px solid #fff',
-              cursor: 'pointer',
-              pointerEvents: 'all',
-            }}
-          />
-        </div>
-      </EdgeLabelRenderer>
     </>
   )
 }
