@@ -1,10 +1,18 @@
 # c4hero Scaling Design
 
-> Status: **Discussion / design phase** — no implementation started yet (as of 2026-06-16).
+> Status: **Active development** (last updated 2026-06-22). Pillars 1 (expand-in-place)
+> and 2 (storage seam) are shipped. Pillars 3–4 are design-phase. New UX improvements
+> are being scoped in §10 (Canvas & Edge UX).
+>
 > This document captures the vision, the decisions, and — most importantly — *why* we
 > made them, so the work can be picked up and extended later.
-
-Interactive prototype of the headline feature: [`docs/expand-in-place-mockup.html`](expand-in-place-mockup.html) (open in a browser).
+>
+> **Design references:** [Excalidraw](https://excalidraw.com) (inline edge editing,
+> free-form rectangle, movable edges, per-element interaction model),
+> [Structurizr](https://structurizr.com) (DSL round-trip, C4 notation, tag-based
+> styling), [Mermaid](https://mermaid.js.org) (diagram-as-code for future sequence
+> views), [TOGAF / ArchiMate](https://pubs.opengroup.org/architecture/archimate2-doc/chap11.html)
+> (gap-analysis vocabulary for change-state).
 
 ---
 
@@ -42,7 +50,7 @@ shove in proprietary data, we lose the one thing that makes c4hero worth choosin
 
 ---
 
-## 3. Pillar 1 — Expand-in-place zoom
+## 3. Pillar 1 — Expand-in-place zoom ⚡ *partially built — L2→L3 done, L4 (code) + DB table view pending*
 
 ### What
 The app starts at the context diagram. Clicking one system expands it **in place** into its
@@ -84,11 +92,18 @@ visible while zooming is the whole point of the request.
 4. Expand/collapse UI + sidecar persistence.
 5. Code level via a `CodeProvider`.
 
-Steps 1–3 are pure and ship before code level matters.
+Steps 1–4 are shipped. **Step 5 (code level) is deferred** — requires a
+`CodeProvider` from Pillar 3 (code-from-source generation). Also deferred:
+- **Database table view** — expand a Database container to show its table
+  schema inline (similar to code level but schema-first). Needs a
+  `DatabaseProvider` that reads table definitions from the model or from
+  an external schema source.
+- **L4 Code zoom** — expand a Component to show its code-level diagram
+  (classes, functions, files). This is Pillar 1 step 5 + Pillar 3 combined.
 
 ---
 
-## 4. Pillar 2 — Pluggable storage (`WorkspaceStore`)
+## 4. Pillar 2 — Pluggable storage (`WorkspaceStore`) ✅ *built*
 
 ### What
 One interface that abstracts *where workspace bytes live*. File-system today, an HTTP API
@@ -250,3 +265,68 @@ Rendering is deterministic, no AI/ML:
 positions override dagre and persist in the sidecar. The app is a pure frontend static app
 with no backend today. Local dev requires Node ≥ 22; dev server runs on
 `http://localhost:3004`.
+
+---
+
+## 10. Canvas & Edge UX (minor improvements)
+
+Small, high-impact UX features that don't change the architecture. Each is
+independent, built off `main`, and scoped for a single small PR.
+
+### Movable edges (drag midpoint to bend)
+
+**What:** hover an edge → a midpoint handle appears → drag to bend the bezier
+curve (Excalidraw-style). Endpoints stay fixed at their nodes. React Flow ships
+this natively (`edgeUpdaterRadius`); we just enable it.
+
+**Scope:** one config addition + an E2E spec. The reconnect-endpoint gesture
+(already working) is separate and stays unchanged.
+
+### Arrange selected only
+
+**What:** auto-arrange today applies to the whole view. Extend it to a selected
+subset: select N nodes, run "auto-arrange," and only those nodes are re-laid-out
+(their non-selected siblings stay put).
+
+**Scope:** extend the existing dagre layout call to accept a node-id subset.
+Small change to `lib/canvasLayout.ts` + the toolbar/command-palette action.
+
+### Free-form rectangle (draw a wrapper, then assign)
+
+**What:** the user draws a rectangle on the canvas (Excalidraw frame / Figma
+auto-layout frame), then assigns elements to it — the wrapper box stays drawn
+around them. Different from the existing Group feature (which selects elements
+first): draw-first, assign-later.
+
+**Note:** Groups and boundaries already exist in the model (`Group` +
+`BoundaryNode`). This is a creation-UX variant, not a new data model. The
+existing group/boundary primitives are reused.
+
+**Scope:** a draw tool on the canvas + group-creation from the drawn rect.
+
+### Per-element / per-edge color picker
+
+**What:** pick a colour directly on a particular element or edge, without going
+through the tag manager.
+
+**⚠️ Design tension.** The current architecture colours everything **by tag**
+(tags carry styles; elements inherit via the tag cascade in `getElementStyle`).
+Per-element colour breaks that model. A middle ground: "create an auto-private
+tag for this element" under the hood — the element gets a unique tag, and the
+colour rides the existing cascade. This keeps the architecture unchanged while
+exposing a simple per-element picker.
+
+**Status:** not scoped for build yet. Needs a dedicated design doc to resolve
+the tag-only vs per-element tension.
+
+---
+
+## 11. Progress log
+
+### 2026-06-22
+
+- **Pillar 2 (storage seam) shipped** — `WorkspaceStore` interface + `LocalFileStore` +
+  `LocalFolderStore` + factory + rewire. Local-first default; cloud extension
+  documented as a TODO in `src/lib/storage/types.ts`. PR #10.
+- **Canvas & edge UX scoped** — movable edges, arrange selected, free-form rectangle,
+  per-element color (design-discussion deferred). Added as §10.
