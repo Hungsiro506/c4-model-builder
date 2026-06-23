@@ -71,4 +71,11 @@ test.describe('Inline edge label editing', () => {
     const ws = await workspace.getWorkspace()
     expect(ws?.model.relationships[0]?.description).toBe('Calls API of')
   })
+
+  test('bare edge has a hover tooltip hinting the double-click action', async ({ workspace }) => {
+    await connectedPair(workspace)
+    // SVG <title> is a child element, not an attribute, in React 19+'s strict typings.
+    const titleEl = workspace.page.locator('.react-flow__edge path title').first()
+    await expect(titleEl).toHaveText(/double.click/i)
+  })
 })

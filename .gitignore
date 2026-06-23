@@ -20,6 +20,10 @@ test-results/
 
 # Claude Code local state
 .claude/
+.c4hero/
+
+# App runtime data (local user workspace files)
+my-architecture*
 
 # superpowers brainstorm session artifacts (mockups, state)
 .superpowers/
