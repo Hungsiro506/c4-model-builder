@@ -7,14 +7,17 @@ import {
   getStraightPath,
   Position,
   type EdgeProps,
+  useReactFlow,
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
+import { setBendOffset } from '@/lib/edgeBends'
 
 interface RelationshipEdgeData {
   relationship: Relationship
   relationshipStyle?: RelationshipStyle
+  bendOffset?: { dx: number; dy: number }
 }
 
 const FULL_LABEL_MAX_WIDTH = 200
@@ -86,51 +89,78 @@ function RelationshipEdge({
     setEditingRelationship(null)
   }
 
-  // Midpoint handle — single-click toggles Curved ⇄ Straight; double-click
-  // opens the inline editor. Both actions are local because the handle lives
-  // in an EdgeLabelRenderer portal (outside the edge SVG), so React Flow's
-  // edge handlers never see these events.
-  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onMidMouseDown = useCallback(() => {
-    if (clickTimer.current) {
-      // Double-click → open inline editor
-      clearTimeout(clickTimer.current)
-      clickTimer.current = null
-      useWorkspaceStore.getState().setEditingRelationship(id)
-      return
+  // Excalidraw-style drag-to-bend: drag the midpoint handle to offset the
+  // bezier control points. The offset is stored in a module-level Map (see
+  // edgeBends.ts) so it survives React Flow edge rebuilds.
+  const { updateEdgeData } = useReactFlow()
+  const bendOffset = data?.bendOffset
+  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
+
+  const onMidMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    dragRef.current = {
+      sx: e.clientX,
+      sy: e.clientY,
+      ox: bendOffset?.dx ?? 0,
+      oy: bendOffset?.dy ?? 0,
     }
-    clickTimer.current = setTimeout(() => {
-      clickTimer.current = null
-      const newStyle = lineStyle === 'Straight' ? 'Curved' : 'Straight'
-      if (relationship) {
-        updateRelationship(relationship.id, { lineStyle: newStyle as 'Curved' | 'Straight' })
-      }
-    }, 300)
-  }, [id, lineStyle, relationship, updateRelationship])
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return
+      const dx = ev.clientX - dragRef.current.sx
+      const dy = ev.clientY - dragRef.current.sy
+      const next = { dx: dragRef.current.ox + dx, dy: dragRef.current.oy + dy }
+      setBendOffset(id, next)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      updateEdgeData(id, { bendOffset: next } as any)
+    }
+    const onUp = () => {
+      dragRef.current = null
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [id, bendOffset, updateEdgeData])
 
   const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
   const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
 
-  // Choose path function based on lineStyle
+  // Compute custom bezier with bend offset applied to control points.
   let edgePath: string
   let labelX: number
   let labelY: number
+  const rawCtrlDist = Math.hypot(targetX - sourceX, targetY - sourceY) * 0.5
 
   if (lineStyle === 'Straight') {
-    [edgePath, labelX, labelY] = getStraightPath({
-      sourceX, sourceY, targetX, targetY,
-    })
+    ;[edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY })
   } else if (lineStyle === 'Orthogonal') {
-    [edgePath, labelX, labelY] = getSmoothStepPath({
-      sourceX, sourceY, targetX, targetY,
-      sourcePosition, targetPosition,
-      borderRadius: 20,
+    ;[edgePath, labelX, labelY] = getSmoothStepPath({
+      sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 20,
     })
+  } else if (bendOffset) {
+    // Custom bezier with offset control points
+    const ctrlOffset = (pos: Position, amount: number): [number, number] => {
+      switch (pos) {
+        case Position.Bottom: return [0, amount]
+        case Position.Top: return [0, -amount]
+        case Position.Right: return [amount, 0]
+        case Position.Left: return [-amount, 0]
+        default: return [0, 0]
+      }
+    }
+    const [scx, scy] = ctrlOffset(sourcePosition, rawCtrlDist)
+    const [tcx, tcy] = ctrlOffset(targetPosition, rawCtrlDist)
+    const sx = sourceX + scx + bendOffset.dx
+    const sy = sourceY + scy + bendOffset.dy
+    const tx = targetX + tcx + bendOffset.dx
+    const ty = targetY + tcy + bendOffset.dy
+    edgePath = `M ${sourceX},${sourceY} C ${sx},${sy} ${tx},${ty} ${targetX},${targetY}`
+    labelX = (sourceX + targetX) / 2
+    labelY = (sourceY + targetY) / 2
   } else {
-    // Default: Curved (bezier)
-    [edgePath, labelX, labelY] = getBezierPath({
-      sourceX, sourceY, targetX, targetY,
-      sourcePosition, targetPosition,
+    ;[edgePath, labelX, labelY] = getBezierPath({
+      sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition,
     })
   }
 
@@ -180,7 +210,7 @@ function RelationshipEdge({
       >
         <title>{relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}</title>
       </path>
-      {/* Midpoint handle — appears on hover; click toggles Curved ⇄ Straight */}
+      {/* Midpoint handle — appears on hover; drag to bend the bezier */}
       <EdgeLabelRenderer>
         <div
           className="react-flow__edgeupdater"
@@ -194,10 +224,12 @@ function RelationshipEdge({
             borderRadius: '50%',
             border: '2px solid var(--canvas-selection, var(--color-accent))',
             background: 'color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 20%, transparent)',
-            cursor: 'pointer',
+            cursor: 'grab',
             opacity: hovered ? 1 : 0,
             transition: 'opacity 0.15s',
           }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
           onMouseDown={onMidMouseDown}
         />
       </EdgeLabelRenderer>
