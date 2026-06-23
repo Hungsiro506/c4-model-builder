@@ -12,12 +12,14 @@ import {
 import type { Relationship, RelationshipStyle } from '@/types/model'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
-import { setBendOffset } from '@/lib/edgeBends'
+import { setBendHandle, getBendHandles } from '@/lib/edgeBends'
+
+import type { BendHandles } from '@/lib/edgeBends'
 
 interface RelationshipEdgeData {
   relationship: Relationship
   relationshipStyle?: RelationshipStyle
-  bendOffset?: { dx: number; dy: number }
+  bendHandles?: BendHandles
 }
 
 const FULL_LABEL_MAX_WIDTH = 200
@@ -89,30 +91,25 @@ function RelationshipEdge({
     setEditingRelationship(null)
   }
 
-  // Excalidraw-style drag-to-bend: drag the midpoint handle to offset the
-  // bezier control points. The offset is stored in a module-level Map (see
-  // edgeBends.ts) so it survives React Flow edge rebuilds.
+  // Excalidraw-style handles: three dots (source-side, midpoint, target-side).
+  // Each drags independently; offsets stored in edgeBends.ts module Map.
   const { updateEdgeData } = useReactFlow()
-  const bendOffset = data?.bendOffset
-  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
+  const handles = useMemo(() => data?.bendHandles ?? { m: { dx: 0, dy: 0 }, s: { dx: 0, dy: 0 }, t: { dx: 0, dy: 0 } }, [data?.bendHandles])
+  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; which: 's' | 'm' | 't' } | null>(null)
 
-  const onMidMouseDown = useCallback((e: React.MouseEvent) => {
+  const makeDragHandler = useCallback((which: 's' | 'm' | 't') => (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    dragRef.current = {
-      sx: e.clientX,
-      sy: e.clientY,
-      ox: bendOffset?.dx ?? 0,
-      oy: bendOffset?.dy ?? 0,
-    }
+    const cur = handles[which]
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: cur.dx, oy: cur.dy, which }
     const onMove = (ev: MouseEvent) => {
       if (!dragRef.current) return
       const dx = ev.clientX - dragRef.current.sx
       const dy = ev.clientY - dragRef.current.sy
       const next = { dx: dragRef.current.ox + dx, dy: dragRef.current.oy + dy }
-      setBendOffset(id, next)
+      setBendHandle(id, dragRef.current.which, next)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      updateEdgeData(id, { bendOffset: next } as any)
+      updateEdgeData(id, { bendHandles: getBendHandles(id) } as any)
     }
     const onUp = () => {
       dragRef.current = null
@@ -121,7 +118,7 @@ function RelationshipEdge({
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [id, bendOffset, updateEdgeData])
+  }, [id, handles, updateEdgeData])
 
   const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
   const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
@@ -138,8 +135,8 @@ function RelationshipEdge({
     ;[edgePath, labelX, labelY] = getSmoothStepPath({
       sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 20,
     })
-  } else if (bendOffset) {
-    // Custom bezier with offset control points
+  } else if (handles) {
+    // Custom bezier with three offset handles (s=source-side, m=mid, t=target-side)
     const ctrlOffset = (pos: Position, amount: number): [number, number] => {
       switch (pos) {
         case Position.Bottom: return [0, amount]
@@ -151,10 +148,11 @@ function RelationshipEdge({
     }
     const [scx, scy] = ctrlOffset(sourcePosition, rawCtrlDist)
     const [tcx, tcy] = ctrlOffset(targetPosition, rawCtrlDist)
-    const sx = sourceX + scx + bendOffset.dx
-    const sy = sourceY + scy + bendOffset.dy
-    const tx = targetX + tcx + bendOffset.dx
-    const ty = targetY + tcy + bendOffset.dy
+    const { s, m, t } = handles
+    const sx = sourceX + scx + (s.dx + m.dx)
+    const sy = sourceY + scy + (s.dy + m.dy)
+    const tx = targetX + tcx + (t.dx + m.dx)
+    const ty = targetY + tcy + (t.dy + m.dy)
     edgePath = `M ${sourceX},${sourceY} C ${sx},${sy} ${tx},${ty} ${targetX},${targetY}`
     labelX = (sourceX + targetX) / 2
     labelY = (sourceY + targetY) / 2
@@ -210,28 +208,38 @@ function RelationshipEdge({
       >
         <title>{relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}</title>
       </path>
-      {/* Midpoint handle — appears on hover; drag to bend the bezier */}
+      {/* Excalidraw-style handles: three dots at 25%, 50%, 75% */}
       <EdgeLabelRenderer>
-        <div
-          className="react-flow__edgeupdater"
-          style={{
-            position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-            pointerEvents: 'all',
-            zIndex: 5,
-            width: 12,
-            height: 12,
-            borderRadius: '50%',
-            border: '2px solid var(--canvas-selection, var(--color-accent))',
-            background: 'color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 20%, transparent)',
-            cursor: 'grab',
-            opacity: hovered ? 1 : 0,
-            transition: 'opacity 0.15s',
-          }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          onMouseDown={onMidMouseDown}
-        />
+        {([
+          { which: 's' as const, t: 0.25 },
+          { which: 'm' as const, t: 0.5 },
+          { which: 't' as const, t: 0.75 },
+        ]).map(({ which, t: frac }) => {
+          const hx = sourceX + (targetX - sourceX) * frac
+          const hy = sourceY + (targetY - sourceY) * frac
+          const off = handles[which]
+          return (
+            <div
+              key={which}
+              className="react-flow__edgeupdater"
+              style={{
+                position: 'absolute',
+                transform: `translate(-50%, -50%) translate(${hx + off.dx}px, ${hy + off.dy}px)`,
+                pointerEvents: 'all',
+                zIndex: 5,
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                border: '1.5px solid var(--canvas-selection, var(--color-accent))',
+                background: 'var(--canvas-selection, var(--color-accent))',
+                cursor: 'grab',
+                opacity: hovered || selected ? 1 : 0,
+                transition: 'opacity 0.15s',
+              }}
+              onMouseDown={makeDragHandler(which)}
+            />
+          )
+        })}
       </EdgeLabelRenderer>
       <BaseEdge
         id={id}
