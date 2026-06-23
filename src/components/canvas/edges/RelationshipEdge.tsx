@@ -371,9 +371,9 @@ function RelationshipEdge({
           className="react-flow__edgeupdater"
           style={{
             position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${(descriptionText || technologyTokens.length > 0) ? labelY - 18 : labelY}px)`,
-            width: 16,
-            height: 16,
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${(descriptionText || technologyTokens.length > 0) ? labelY - 24 : labelY}px)`,
+            width: 18,
+            height: 18,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
