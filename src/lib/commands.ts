@@ -10,7 +10,8 @@ import { useWorkspaceStore, getCreatableTypes, getActiveView, getAllViews, isFoc
 import { computeCascadeImpact } from '@/store/workspace-helpers'
 import { formatImpactSummary } from '@/lib/impactMessage'
 import { serializeDSL } from '@/lib/dsl'
-import { saveDSLFile, writeSidecarToHandle } from '@/lib/fileIO'
+import { saveDSLFile } from '@/lib/fileIO'
+import { getActiveStore } from '@/lib/storage'
 import { downloadFile, downloadBlob, exportCanvasAsPNG, exportCanvasAsSVG } from '@/lib/exportUtils'
 import { extractSidecar, serializeSidecar } from '@/lib/sidecar'
 import { fitContentNodesToViewport } from '@/lib/fitViewport'
@@ -375,9 +376,12 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.workspace) return
         const dsl = serializeDSL(s.workspace)
-        await saveDSLFile(dsl, `${s.workspace.name ?? 'workspace'}.dsl`)
         const sidecar = extractSidecar(s.workspace)
-        if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
+        await getActiveStore().save({
+          content: dsl,
+          sidecarJson: sidecar ? serializeSidecar(sidecar) : undefined,
+          suggestedName: `${s.workspace.name ?? 'workspace'}.dsl`,
+        })
       },
     },
     {

@@ -3,7 +3,8 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '@/store/workspace'
 import type { WorkspaceScope } from '@/types/model'
 import { createBigBankSample, createBlankWorkspace } from '@/lib/templates'
-import { openDSLFile, hasFileSystemAccess, isWorkspaceShape, readTextFileWithLimit } from '@/lib/fileIO'
+import { hasFileSystemAccess, isWorkspaceShape, readTextFileWithLimit } from '@/lib/fileIO'
+import { getActiveStore } from '@/lib/storage'
 import { createLogger } from '@/lib/logger'
 import {
   openFolder,
@@ -446,14 +447,15 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
       dslInputRef.current?.click()
       return
     }
-    const file = await openDSLFile()
-    if (!file) return
-    setLoadingWorkspace(file.name.replace(/\.dsl$/, ''))
+    const result = await getActiveStore().open()
+    if (!result) return
+    const name = result.ref.name
+    setLoadingWorkspace(name.replace(/\.dsl$/, ''))
     try {
       const { workspace, errors } = parseWorkspaceDocument({
-        content: file.content,
-        fallbackName: file.name.replace(/\.dsl$/, ''),
-        sidecarJson: file.sidecarJson,
+        content: result.content,
+        fallbackName: name.replace(/\.dsl$/, ''),
+        sidecarJson: result.sidecarJson,
       })
       if (errors.length > 0) log.warn("DSL parse warnings", errors)
       loadWorkspace(workspace)
