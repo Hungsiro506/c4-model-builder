@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useRef, useEffect } from 'react'
+import { memo, useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -86,6 +86,28 @@ function RelationshipEdge({
     setEditingRelationship(null)
   }
 
+  // Midpoint handle — single-click toggles Curved ⇄ Straight; double-click
+  // opens the inline editor. Both actions are local because the handle lives
+  // in an EdgeLabelRenderer portal (outside the edge SVG), so React Flow's
+  // edge handlers never see these events.
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onMidMouseDown = useCallback(() => {
+    if (clickTimer.current) {
+      // Double-click → open inline editor
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+      useWorkspaceStore.getState().setEditingRelationship(id)
+      return
+    }
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null
+      const newStyle = lineStyle === 'Straight' ? 'Curved' : 'Straight'
+      if (relationship) {
+        updateRelationship(relationship.id, { lineStyle: newStyle as 'Curved' | 'Straight' })
+      }
+    }, 300)
+  }, [id, lineStyle, relationship, updateRelationship])
+
   const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
   const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
 
@@ -158,6 +180,27 @@ function RelationshipEdge({
       >
         <title>{relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}</title>
       </path>
+      {/* Midpoint handle — appears on hover; click toggles Curved ⇄ Straight */}
+      <EdgeLabelRenderer>
+        <div
+          className="react-flow__edgeupdater"
+          style={{
+            position: 'absolute',
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            pointerEvents: 'all',
+            zIndex: 5,
+            width: 12,
+            height: 12,
+            borderRadius: '50%',
+            border: '2px solid var(--canvas-selection, var(--color-accent))',
+            background: 'color-mix(in srgb, var(--canvas-selection, var(--color-accent)) 20%, transparent)',
+            cursor: 'pointer',
+            opacity: hovered ? 1 : 0,
+            transition: 'opacity 0.15s',
+          }}
+          onMouseDown={onMidMouseDown}
+        />
+      </EdgeLabelRenderer>
       <BaseEdge
         id={id}
         path={edgePath}
@@ -224,6 +267,7 @@ function RelationshipEdge({
               borderRadius: 10,
               background: 'color-mix(in srgb, var(--canvas-bg, var(--color-bg-primary)) 82%, transparent)',
               boxShadow: '0 1px 2px color-mix(in srgb, black 12%, transparent)',
+              zIndex: 10,
               textAlign: 'center',
               lineHeight: 1.3,
               display: 'flex',
