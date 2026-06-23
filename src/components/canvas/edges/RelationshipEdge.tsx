@@ -88,13 +88,24 @@ function RelationshipEdge({
     setEditingRelationship(null)
   }
 
-  // Midpoint handle: click to toggle Curved ⇄ Straight line style.
-  // Drag-to-bend (Excalidraw-style) is a follow-up — see edgeBends.ts.
-  const onToggleStyle = useCallback(() => {
-    if (!relationship) return
-    const newStyle = lineStyle === 'Straight' ? 'Curved' : 'Straight'
-    updateRelationship(relationship.id, { lineStyle: newStyle as 'Curved' | 'Straight' })
-  }, [lineStyle, relationship, updateRelationship])
+  // Midpoint handle: single-click = toggle Curved ⇄ Straight,
+  // double-click = open inline editor. Timer distinguishes the two.
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onDotClick = useCallback(() => {
+    if (clickTimer.current) {
+      // Double-click → open inline editor
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+      useWorkspaceStore.getState().setEditingRelationship(id)
+      return
+    }
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null
+      if (!relationship) return
+      const newStyle = lineStyle === 'Straight' ? 'Curved' : 'Straight'
+      updateRelationship(relationship.id, { lineStyle: newStyle as 'Curved' | 'Straight' })
+    }, 300)
+  }, [id, lineStyle, relationship, updateRelationship])
 
   const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
   const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
@@ -354,18 +365,36 @@ function RelationshipEdge({
           </div>
         </EdgeLabelRenderer>
       )}
-      {/* Midpoint handle — always visible; click toggles Curved ⇄ Straight */}
-      <circle
-        className="react-flow__edgeupdater"
-        cx={labelX}
-        cy={labelY}
-        r={5}
-        fill="var(--canvas-selection, var(--color-accent))"
-        stroke="#fff"
-        strokeWidth={1.5}
-        style={{ cursor: 'pointer', pointerEvents: 'all' }}
-        onMouseDown={onToggleStyle}
-      />
+      {/* Midpoint handle — in EdgeLabelRenderer so it's above the label */}
+      <EdgeLabelRenderer>
+        <div
+          className="react-flow__edgeupdater"
+          style={{
+            position: 'absolute',
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${(descriptionText || technologyTokens.length > 0) ? labelY - 18 : labelY}px)`,
+            width: 16,
+            height: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            zIndex: 20,
+          }}
+          onMouseDown={(e) => { e.stopPropagation(); onDotClick() }}
+        >
+          <div
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: 'var(--canvas-selection, var(--color-accent))',
+              border: '1.5px solid #fff',
+              cursor: 'pointer',
+              pointerEvents: 'all',
+            }}
+          />
+        </div>
+      </EdgeLabelRenderer>
     </>
   )
 }
