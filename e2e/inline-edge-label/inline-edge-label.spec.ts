@@ -71,4 +71,12 @@ test.describe('Inline edge label editing', () => {
     const ws = await workspace.getWorkspace()
     expect(ws?.model.relationships[0]?.description).toBe('Calls API of')
   })
+
+  test('bare edge has a hover tooltip hinting the double-click action', async ({ workspace }) => {
+    await connectedPair(workspace)
+    // The invisible wider hit-path on every edge should carry a title so users
+    // discover the double-click-edit gesture.
+    const hitPath = workspace.page.locator('.react-flow__edge path[title]').first()
+    await expect(hitPath).toHaveAttribute('title', /double.click/i)
+  })
 })

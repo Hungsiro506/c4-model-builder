@@ -151,10 +151,11 @@ function RelationshipEdge({
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={20}
+        strokeWidth={24}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        style={{ pointerEvents: 'stroke' }}
+        style={{ pointerEvents: 'stroke', cursor: 'text' }}
+        title={relationship?.description ? 'Double-click to edit' : 'Double-click to add description'}
       />
       <BaseEdge
         id={id}
