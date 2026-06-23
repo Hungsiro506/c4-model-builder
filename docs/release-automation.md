@@ -37,6 +37,10 @@ This workflow is **inert until merged to `main`** and until the repo grants writ
 
 ## Progress log
 
+### 2026-06-22 — `generate_release_notes: true` added
+
+- Releases now include GitHub's native auto-generated release notes (groups merged PRs by title/author with links), combined with the tag-action's changelog. Every release is still editable manually.
+
 ### 2026-06-21 — prepared on `ci/release-automation`
 
 - Added `release.yml` (auto pre-release tag + GitHub pre-release from Conventional Commits) as a workaround branch while admin/permission access is pending. Inert until merged to `main` + write permission enabled.
