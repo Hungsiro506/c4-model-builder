@@ -4377,3 +4377,118 @@ describe('removeElementsFromView', () => {
     expect(useWorkspaceStore.getState().workspace!.views.containerViews[0].elements).toEqual([{ id: 'c1' }])
   })
 })
+
+// ─── Table slice (DB Table View) ──────────────────────────────────────
+
+describe('table slice', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  it('starts with empty tableData', () => {
+    expect(useWorkspaceStore.getState().tableData).toEqual({})
+  })
+
+  it('addTable creates a table with one default column', () => {
+    const id = useWorkspaceStore.getState().addTable('db1', 'users')
+    const tables = useWorkspaceStore.getState().tableData['db1']
+    expect(tables).toHaveLength(1)
+    expect(tables[0].name).toBe('users')
+    expect(tables[0].columns).toHaveLength(1)
+    expect(tables[0].columns[0]).toMatchObject({
+      name: 'id',
+      type: 'INT',
+      primaryKey: true,
+      nullable: false,
+    })
+    expect(typeof id).toBe('string')
+    expect(id.length).toBe(8) // nanoid
+  })
+
+  it('updateTable changes table name and description', () => {
+    const id = useWorkspaceStore.getState().addTable('db1', 'users')
+    useWorkspaceStore.getState().updateTable('db1', id, { name: 'accounts', description: 'Account records' })
+    const table = useWorkspaceStore.getState().tableData['db1'][0]
+    expect(table.name).toBe('accounts')
+    expect(table.description).toBe('Account records')
+  })
+
+  it('deleteTable removes a table', () => {
+    const id = useWorkspaceStore.getState().addTable('db1', 'users')
+    useWorkspaceStore.getState().deleteTable('db1', id)
+    const tables = useWorkspaceStore.getState().tableData['db1']
+    expect(tables).toBeUndefined()
+  })
+
+  it('addColumn appends an empty column', () => {
+    const tableId = useWorkspaceStore.getState().addTable('db1', 'users')
+    useWorkspaceStore.getState().addColumn('db1', tableId)
+    const cols = useWorkspaceStore.getState().tableData['db1'][0].columns
+    expect(cols).toHaveLength(2)
+    expect(cols[1]).toMatchObject({
+      name: '',
+      type: 'VARCHAR(255)',
+      primaryKey: false,
+      nullable: true,
+    })
+  })
+
+  it('updateColumn modifies column properties', () => {
+    const tableId = useWorkspaceStore.getState().addTable('db1', 'users')
+    useWorkspaceStore.getState().updateColumn('db1', tableId, 0, { name: 'user_id', primaryKey: false })
+    const col = useWorkspaceStore.getState().tableData['db1'][0].columns[0]
+    expect(col.name).toBe('user_id')
+    expect(col.primaryKey).toBe(false)
+  })
+
+  it('deleteColumn refuses to delete the last column', () => {
+    const tableId = useWorkspaceStore.getState().addTable('db1', 'users')
+    useWorkspaceStore.getState().deleteColumn('db1', tableId, 0)
+    const cols = useWorkspaceStore.getState().tableData['db1'][0].columns
+    expect(cols).toHaveLength(1)
+  })
+
+  it('moveColumn reorders columns', () => {
+    const tableId = useWorkspaceStore.getState().addTable('db1', 'users')
+    useWorkspaceStore.getState().addColumn('db1', tableId)
+    // Now: [id (PK), VARCHAR(255)]
+    useWorkspaceStore.getState().updateColumn('db1', tableId, 1, { name: 'name' })
+    useWorkspaceStore.getState().moveColumn('db1', tableId, 0, 1)
+    const cols = useWorkspaceStore.getState().tableData['db1'][0].columns
+    expect(cols[0].name).toBe('name')
+    expect(cols[1].name).toBe('id')
+  })
+
+  it('setTablesForContainer replaces all tables', () => {
+    useWorkspaceStore.getState().addTable('db1', 'old')
+    useWorkspaceStore.getState().setTablesForContainer('db1', [
+      { id: 't1', name: 'new_table', columns: [] },
+    ])
+    const tables = useWorkspaceStore.getState().tableData['db1']
+    expect(tables).toHaveLength(1)
+    expect(tables![0].name).toBe('new_table')
+  })
+
+  it('setMermaidText persists and retrieves mermaid text', () => {
+    useWorkspaceStore.getState().setMermaidText('db1', 'erDiagram\n    users { int id PK }')
+    expect(useWorkspaceStore.getState().mermaidText['db1']).toContain('erDiagram')
+  })
+
+  it('closeWorkspace clears tableData', () => {
+    useWorkspaceStore.getState().addTable('db1', 'users')
+    useWorkspaceStore.getState().closeWorkspace()
+    expect(useWorkspaceStore.getState().tableData).toEqual({})
+    expect(useWorkspaceStore.getState().mermaidText).toEqual({})
+  })
+
+  it('mermaidOverlayContainerId defaults to null', () => {
+    expect(useWorkspaceStore.getState().mermaidOverlayContainerId).toBeNull()
+  })
+
+  it('setMermaidOverlayContainerId opens and closes', () => {
+    useWorkspaceStore.getState().setMermaidOverlayContainerId('db1')
+    expect(useWorkspaceStore.getState().mermaidOverlayContainerId).toBe('db1')
+    useWorkspaceStore.getState().setMermaidOverlayContainerId(null)
+    expect(useWorkspaceStore.getState().mermaidOverlayContainerId).toBeNull()
+  })
+})

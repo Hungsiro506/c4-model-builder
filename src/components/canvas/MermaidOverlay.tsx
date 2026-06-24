@@ -33,6 +33,7 @@ export default function MermaidOverlay({ containerId, containerName, onClose }: 
     initialized.current = true
 
     if (mermaidTextStore) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- guarded by ref, one-time init
       setText(mermaidTextStore)
     } else {
       const tables = tableData[containerId] ?? []
@@ -59,9 +60,6 @@ export default function MermaidOverlay({ containerId, containerName, onClose }: 
 
     // Resolve FK references by naming convention
     resolveForeignKeys(result)
-
-    // Build relationships from parsed data
-    const relationships = result.relationships ?? []
 
     setTablesForContainer(containerId, result.tables)
     setMermaidText(containerId, text)

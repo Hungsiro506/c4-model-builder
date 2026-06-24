@@ -208,7 +208,7 @@ function pushSiblingsClearOfWrappers(
   if (realRects.size === 0) return contentNodes
 
   const axis = axisForDirection(direction)
-  const parentOf = buildParentMap(workspace, tableData)
+  const parentOf = buildParentMap(workspace, tData)
   const hasExpandedAncestor = (id: string): boolean => {
     let cur = parentOf.get(id)
     while (cur !== undefined) {
@@ -275,6 +275,7 @@ export default function Canvas() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const expandedElementIds = useWorkspaceStore((s) => s.expandedElementIds)
+  const tableDataForDeps = useWorkspaceStore((s) => s.tableData)
   const selectElements = useWorkspaceStore((s) => s.selectElements)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
@@ -478,7 +479,7 @@ export default function Canvas() {
     //     then we expand into the shifted layout.
     let expandedNodes = laidOut
     if (expandedElementIds.length > 0) {
-      const tableData = useWorkspaceStore.getState().tableData
+      const tableData = tableDataForDeps
       const expandCtx = {
         expandedIds: new Set(expandedElementIds),
         direction,
@@ -556,7 +557,7 @@ export default function Canvas() {
       : buildEdges(workspace, view, allNodes, highlightFilters)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableDataForDeps])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.

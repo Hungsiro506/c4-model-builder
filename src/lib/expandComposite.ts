@@ -106,7 +106,7 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
   for (const child of children) {
     g.setNode(child.id, sizeOf(child.id))
   }
-  for (const [tid, tdef] of tableIds) {
+  for (const tid of tableIds.keys()) {
     g.setNode(tid, sizeOf(tid))
   }
   for (const rel of ctx.relationships) {

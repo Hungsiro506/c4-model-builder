@@ -3,7 +3,7 @@
 
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
-import type { TableDef, ColumnDef } from '@/types/model'
+import type { ColumnDef } from '@/types/model'
 import { nanoid } from '../internals'
 
 export type TableSlice = Pick<WorkspaceState,
