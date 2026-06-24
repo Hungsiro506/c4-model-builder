@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import { Minimize2, Plus } from 'lucide-react'
+import { memo, useState, useRef, useEffect } from 'react'
+import { Minimize2, Plus, Database, Box } from 'lucide-react'
 import type { NodeProps } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import NodeHandles from './NodeHandles'
@@ -21,6 +21,19 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const addTable = useWorkspaceStore((s) => s.addTable)
   const isSystem = data.typeLabel === 'Software System'
   const isDatabase = data.typeLabel === 'Database'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
+
   // Populated expand-in-place boundaries are draggable as a unit: the whole box
   // body grabs (children are separate nodes stacked on top, so they stay
   // interactive). Empty boundaries + scope/group boundaries stay pointer-
@@ -35,9 +48,9 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   // Expand-in-place add: create a child of the expanded element, shown inside
   // this boundary via the parent's expansion. skipActiveView keeps it out of
   // the underlying (e.g. landscape) view so it never renders as a stray node.
-  const addChild = () => {
+  const addChild = (tag?: string) => {
     if (!data.elementId) return
-    if (isSystem) addContainer(data.elementId, 'New Container', undefined, undefined, { skipActiveView: true })
+    if (isSystem) addContainer(data.elementId, 'New Container', undefined, tag, { skipActiveView: true })
     else if (isDatabase) addTable(data.elementId, 'new_table')
     else addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
   }
@@ -90,14 +103,55 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
         </div>
         {data.collapsible && data.elementId && (
           <>
-            <button
-              className="c4-node-action-btn nodrag"
-              style={{ marginTop: 1 }}
-              onClick={(e) => { e.stopPropagation(); addChild() }}
-              aria-label={ariaLabel}
-            >
-              <Plus size={11} aria-hidden="true" />
-            </button>
+            {isSystem ? (
+              <div ref={menuRef} style={{ position: 'relative', marginTop: 1 }}>
+                <button
+                  className="c4-node-action-btn nodrag"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
+                  aria-label="Add element"
+                >
+                  <Plus size={11} aria-hidden="true" />
+                </button>
+                {menuOpen && (
+                  <div
+                    className="glass-flyout"
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      marginTop: 4,
+                      zIndex: 100,
+                      minWidth: 170,
+                      padding: 4,
+                    }}
+                  >
+                    <button
+                      className="flyout-item"
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); addChild() }}
+                    >
+                      <span className="flyout-item-icon"><Box size={13} /></span>
+                      <span className="flyout-item-label">New Container</span>
+                    </button>
+                    <button
+                      className="flyout-item"
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); addChild('Database') }}
+                    >
+                      <span className="flyout-item-icon" style={{ color: 'var(--color-type-container)' }}><Database size={13} /></span>
+                      <span className="flyout-item-label">New Database</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                className="c4-node-action-btn nodrag"
+                style={{ marginTop: 1 }}
+                onClick={(e) => { e.stopPropagation(); addChild() }}
+                aria-label={ariaLabel}
+              >
+                <Plus size={11} aria-hidden="true" />
+              </button>
+            )}
             <button
               className="c4-node-action-btn nodrag"
               style={{ marginTop: 1 }}
