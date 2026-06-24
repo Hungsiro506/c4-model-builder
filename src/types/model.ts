@@ -142,6 +142,27 @@ export interface ViewConfiguration {
   themes?: string[]
 }
 
+// ─── DB Table Definitions ────────────────────────────────────────────
+// Tables are sidecar-only metadata — NOT model elements. They never
+// appear in the DSL. See docs/SCALING-DESIGN.md §3 (Database table view).
+
+export interface ColumnDef {
+  name: string
+  type: string          // e.g. "VARCHAR(255)", "INT", "BIGINT"
+  primaryKey: boolean
+  nullable: boolean
+  foreignKey?: string   // e.g. "users.id" — references table.column
+  defaultValue?: string
+  description?: string
+}
+
+export interface TableDef {
+  id: string            // nanoid, stable across saves
+  name: string
+  columns: ColumnDef[]
+  description?: string
+}
+
 // ─── Model ───────────────────────────────────────────────────────────
 
 export interface Model {
