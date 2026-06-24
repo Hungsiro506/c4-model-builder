@@ -1,6 +1,6 @@
 import type {
   Workspace, ModelElement, Relationship, Group,
-  ViewType, ElementStatus,
+  ViewType, ElementStatus, TableDef, ColumnDef,
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
 export interface CascadeImpact {
@@ -107,8 +107,13 @@ export interface WorkspaceState extends UndoState {
   scopeViolations: ScopeViolation[]
   revalidateScope: () => void
 
+  // DB Table data (sidecar-backed, not in DSL)
+  tableData: Record<string, TableDef[]>
+  /** Persisted Mermaid ERD text per database container. Keyed by container ID. */
+  mermaidText: Record<string, string>
+
   // Workspace lifecycle
-  loadWorkspace: (workspace: Workspace) => void
+  loadWorkspace: (workspace: Workspace, tableData?: Record<string, TableDef[]>) => void
   closeWorkspace: () => void
   updateWorkspaceMeta: (patch: { name?: string; description?: string }) => void
 
@@ -254,4 +259,16 @@ export interface WorkspaceState extends UndoState {
   createViewDialogOpen: boolean
   setCreateViewDialogOpen: (open: boolean) => void
   setPresentationMode: (on: boolean) => void
+
+  // Table CRUD (database diagram)
+  addTable: (containerId: string, name: string) => string
+  updateTable: (containerId: string, tableId: string, patch: Partial<Pick<TableDef, 'name' | 'description'>>) => void
+  deleteTable: (containerId: string, tableId: string) => void
+  addColumn: (containerId: string, tableId: string) => void
+  updateColumn: (containerId: string, tableId: string, columnIndex: number, patch: Partial<ColumnDef>) => void
+  deleteColumn: (containerId: string, tableId: string, columnIndex: number) => void
+  moveColumn: (containerId: string, tableId: string, fromIndex: number, toIndex: number) => void
+  /** Replace all tables for a container (e.g. from Mermaid parse). */
+  setTablesForContainer: (containerId: string, tables: TableDef[]) => void
+  setMermaidText: (containerId: string, text: string) => void
 }

@@ -30,10 +30,12 @@ export const createLifecycleSlice: StateCreator<
     s.scopeViolations = s.workspace ? validateScope(s.workspace) : []
   }),
 
-  loadWorkspace: (workspace) => {
+  loadWorkspace: (workspace, tableData) => {
     const firstView = getFirstViewKey(workspace)
     set({
       workspace,
+      tableData: tableData ?? {},
+      mermaidText: {},
       activeViewKey: firstView,
       viewHistory: [],
       selectedElementIds: [],
@@ -59,6 +61,8 @@ export const createLifecycleSlice: StateCreator<
   closeWorkspace: () =>
     set({
       workspace: null,
+      tableData: {},
+      mermaidText: {},
       activeWorkspaceFilename: null,
       activeViewKey: null,
       viewHistory: [],
