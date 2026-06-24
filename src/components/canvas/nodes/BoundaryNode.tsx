@@ -116,13 +116,22 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
                   <div
                     className="glass-flyout"
                     style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      marginTop: 4,
-                      zIndex: 100,
+                      position: 'fixed',
+                      top: 'auto',
+                      left: 'auto',
+                      zIndex: 9999,
                       minWidth: 170,
                       padding: 4,
+                    }}
+                    ref={(el) => {
+                      if (el) {
+                        const btn = el.previousSibling as HTMLElement | null
+                        if (btn) {
+                          const r = btn.getBoundingClientRect()
+                          el.style.top = (r.bottom + 4) + 'px'
+                          el.style.left = r.left + 'px'
+                        }
+                      }
                     }}
                   >
                     <button

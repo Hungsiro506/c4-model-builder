@@ -119,6 +119,8 @@ export function buildTableNode(
     id: tableNodeId(containerId, tableDef.id),
     type: 'table',
     position,
+    selectable: false, // tables are not model elements — avoid breaking selection system
+    focusable: false,
     data: {
       tableDef,
       containerId,
