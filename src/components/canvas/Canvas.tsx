@@ -17,7 +17,7 @@ import { applyAutoLayout } from '@/lib/canvasLayout'
 import { fitNodesToViewport, isContentFitNode } from '@/lib/fitViewport'
 import { saveViewport, loadViewport } from '@/lib/viewportStorage'
 import type { HighlightFilters } from '@/lib/highlight'
-import type { View, Workspace } from '@/types/model'
+import type { View, Workspace, TableDef } from '@/types/model'
 import { useWorkspaceStore, getActiveView, allViewsOf, buildRelationshipMap } from '@/store/workspace'
 import { useSettingsStore } from '@/store/settings'
 import {
