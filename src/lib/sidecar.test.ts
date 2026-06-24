@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import { extractSidecar, applySidecar, parseSidecar, serializeSidecar, sidecarName } from './sidecar'
-import type { Workspace } from '@/types/model'
+import type { Workspace, TableDef } from '@/types/model'
 
 function makeWorkspace(): Workspace {
   return {
@@ -340,5 +340,137 @@ describe('sidecarName', () => {
   it('sanitizes unsafe sidecar base names', () => {
     expect(sidecarName('../CON.dsl')).toBe('__CON.c4hero.json')
     expect(sidecarName('line\nbreak.dsl')).toBe('line_break.c4hero.json')
+  })
+})
+
+describe('table data in sidecar', () => {
+  const sampleTableData: Record<string, TableDef[]> = {
+    container1: [
+      {
+        id: 'tab1',
+        name: 'users',
+        description: 'User accounts',
+        columns: [
+          { name: 'id', type: 'INT', primaryKey: true, nullable: false, description: 'Primary key' },
+          { name: 'name', type: 'VARCHAR(255)', primaryKey: false, nullable: true },
+          { name: 'org_id', type: 'INT', primaryKey: false, nullable: true, foreignKey: 'organizations.id' },
+        ],
+      },
+      {
+        id: 'tab2',
+        name: 'organizations',
+        columns: [
+          { name: 'id', type: 'INT', primaryKey: true, nullable: false },
+        ],
+      },
+    ],
+  }
+
+  it('round-trips tables through extract + serialize + parse + apply', () => {
+    const workspace = makeWorkspace()
+    const sidecar = extractSidecar(workspace, sampleTableData)
+    expect(sidecar).not.toBeNull()
+    expect(sidecar!.tables).toBeDefined()
+    expect(sidecar!.tables!.container1).toHaveLength(2)
+
+    // Serialize and parse
+    const json = serializeSidecar(sidecar!)
+    const parsed = parseSidecar(json)
+    expect(parsed).not.toBeNull()
+    expect(parsed!.tables!.container1).toHaveLength(2)
+
+    // Apply to workspace
+    const result = applySidecar(workspace, parsed!)
+    expect(result).toBeDefined()
+    expect(result!.tables.container1).toHaveLength(2)
+    expect(result!.tables.container1[0].name).toBe('users')
+    expect(result!.tables.container1[0].columns).toHaveLength(3)
+    expect(result!.tables.container1[0].columns[0].primaryKey).toBe(true)
+    expect(result!.tables.container1[0].columns[2].foreignKey).toBe('organizations.id')
+  })
+
+  it('extractSidecar without tableData produces no tables field', () => {
+    const workspace = makeWorkspace()
+    const sidecar = extractSidecar(workspace)
+    if (sidecar) {
+      expect(sidecar.tables).toBeUndefined()
+    }
+  })
+
+  it('extractSidecar with empty tableData produces no tables field', () => {
+    const workspace = makeWorkspace()
+    const sidecar = extractSidecar(workspace, {})
+    if (sidecar) {
+      expect(sidecar.tables).toBeUndefined()
+    }
+  })
+
+  it('extractSidecar with empty array for a container omits that key', () => {
+    const workspace = makeWorkspace()
+    const sidecar = extractSidecar(workspace, { container1: [] })
+    // No tables added since the only entry had 0 tables
+    if (sidecar) {
+      expect(sidecar.tables).toBeUndefined()
+    }
+  })
+
+  it('v1 sidecar without tables still applies correctly', () => {
+    const workspace = makeWorkspace()
+    const sidecar = parseSidecar(JSON.stringify({ version: 1 }))
+    expect(sidecar).not.toBeNull()
+    const result = applySidecar(workspace, sidecar!)
+    // No tables field in v1 sidecar → no tables returned
+    expect(result).toBeUndefined()
+  })
+
+  it('rejects invalid table data', () => {
+    const invalid = {
+      version: 1,
+      tables: {
+        c1: [{ id: 't1', name: 123, columns: 'not-an-array' }],
+      },
+    }
+    const parsed = parseSidecar(JSON.stringify(invalid))
+    expect(parsed).toBeNull()
+  })
+
+  it('rejects columns with missing required fields', () => {
+    const invalid = {
+      version: 1,
+      tables: {
+        c1: [{ id: 't1', name: 'ok', columns: [{ name: 'col', type: 'INT' }] }],
+      },
+    }
+    // Missing primaryKey and nullable
+    const parsed = parseSidecar(JSON.stringify(invalid))
+    expect(parsed).toBeNull()
+  })
+
+  it('handles tables with empty columns array', () => {
+    const workspace = makeWorkspace()
+    const tableData: Record<string, TableDef[]> = {
+      c1: [{ id: 'empty', name: 'empty_table', columns: [] }],
+    }
+    const sidecar = extractSidecar(workspace, tableData)
+    expect(sidecar).not.toBeNull()
+    expect(sidecar!.tables!.c1[0].columns).toHaveLength(0)
+
+    const json = serializeSidecar(sidecar!)
+    const parsed = parseSidecar(json)
+    expect(parsed).not.toBeNull()
+
+    const result = applySidecar(workspace, parsed!)
+    expect(result!.tables.c1[0].columns).toHaveLength(0)
+  })
+
+  it('table description is optional', () => {
+    const workspace = makeWorkspace()
+    const tableData: Record<string, TableDef[]> = {
+      c1: [{ id: 't1', name: 'test', columns: [], description: '' }],
+    }
+    const sidecar = extractSidecar(workspace, tableData)
+    // Empty description should be omitted (undefined, not empty string)
+    const t = sidecar!.tables!.c1[0]
+    expect(t.description).toBeUndefined()
   })
 })
