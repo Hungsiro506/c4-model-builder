@@ -477,9 +477,9 @@ export default function Canvas() {
     //     sizing pass measures each expanded box's grown footprint, then we
     //     gap-shift siblings out of the way so the children don't overlap them,
     //     then we expand into the shifted layout.
+    const tableData = tableDataForDeps
     let expandedNodes = laidOut
     if (expandedElementIds.length > 0) {
-      const tableData = tableDataForDeps
       const expandCtx = {
         expandedIds: new Set(expandedElementIds),
         direction,
