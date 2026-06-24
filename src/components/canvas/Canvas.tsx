@@ -274,6 +274,8 @@ export default function Canvas() {
   const updateExpandedChildPosition = useWorkspaceStore((s) => s.updateExpandedChildPosition)
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const syncAutoLayoutPositions = useWorkspaceStore((s) => s.syncAutoLayoutPositions)
+  const elementStyles = useWorkspaceStore((s) => s.elementStyles)
+  const relationshipStyles = useWorkspaceStore((s) => s.relationshipStyles)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
   const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
@@ -434,7 +436,7 @@ export default function Canvas() {
 
     // 1. Build nodes with raw positions from view
     const drillableIds = buildDrillableSet(workspace)
-    const rawNodes = buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles)
+    const rawNodes = buildNodes(workspace, view, stableDrillInto, highlightFilters, viewCountMap, drillableIds, themeStyles, elementStyles)
     const layoutNodes = carryForwardMeasurements(rawNodes, reactFlowInstance.getNodes())
 
     // 2. Build temporary edges (just source/target, no handles yet) for dagre
@@ -473,6 +475,7 @@ export default function Canvas() {
         drillableIds,
         onDrillIn: stableDrillInto,
         viewCountMap,
+        perElementStyles: elementStyles,
       }
       // Sizing pass: how much each top-level expanded box grows vs 200×100.
       const { growth } = expandComposite(laidOut, expandCtx)
@@ -535,11 +538,11 @@ export default function Canvas() {
     //    When anything is expanded, re-target relationships onto nearest visible
     //    ancestors (bundling fan-in to collapsed siblings).
     const edges = expandedElementIds.length > 0
-      ? buildCompositeEdges(workspace, allNodes, highlightFilters)
-      : buildEdges(workspace, view, allNodes, highlightFilters)
+      ? buildCompositeEdges(workspace, allNodes, highlightFilters, relationshipStyles)
+      : buildEdges(workspace, view, allNodes, highlightFilters, relationshipStyles)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, elementStyles, relationshipStyles])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.

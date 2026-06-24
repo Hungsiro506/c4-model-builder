@@ -10,6 +10,8 @@ import { isReservedTag } from '@/store/builtin-tags'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
+import { ColorPicker } from './tagStyleControls'
+import { PRESET_COLORS, TAG_TEXT_PRESETS } from './tagStyleConstants'
 
 const STATUS_OPTIONS: { value: ElementStatus | undefined; label: string; color: string | null }[] = [
   { value: undefined, label: 'Not set', color: null },
@@ -136,6 +138,10 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
     () => workspace && activeViewKey ? isFocalScopeElement(workspace, activeViewKey, element.id) : false,
     [workspace, activeViewKey, element.id],
   )
+  const elementStyles = useWorkspaceStore((s) => s.elementStyles)
+  const setElementStyle = useWorkspaceStore((s) => s.setElementStyle)
+  const clearElementStyle = useWorkspaceStore((s) => s.clearElementStyle)
+  const perElement = elementStyles[element.id]
   const tech = (element as Container | Component).technology
   const hasTech = element.type === 'container' || element.type === 'component'
   const hasLocation = element.type === 'person' || element.type === 'softwareSystem'
@@ -378,6 +384,47 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
               )}
             </div>
 
+            {/* Color (per-element override) */}
+            <div>
+              <FieldLabel>Color</FieldLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', minWidth: 64 }}>Fill</span>
+                  <ColorPicker
+                    value={perElement?.background ?? ''}
+                    onChange={(bg) => {
+                      if (bg) {
+                        setElementStyle(element.id, { ...perElement, background: bg })
+                      } else {
+                        const rest = { ...perElement }
+                        delete rest.background
+                        if (!rest.color) clearElementStyle(element.id)
+                        else setElementStyle(element.id, rest)
+                      }
+                    }}
+                    presets={PRESET_COLORS}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', minWidth: 64 }}>Text</span>
+                  <ColorPicker
+                    value={perElement?.color ?? ''}
+                    onChange={(v) => {
+                      if (v) {
+                        setElementStyle(element.id, { ...perElement, color: v })
+                      } else {
+                        const rest = { ...perElement }
+                        delete rest.color
+                        if (!rest.background) clearElementStyle(element.id)
+                        else setElementStyle(element.id, rest)
+                      }
+                    }}
+                    presets={TAG_TEXT_PRESETS}
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Appears in views */}
             {appearsInViews.length > 0 && (
               <AppearsInViews views={appearsInViews} />
@@ -452,6 +499,10 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
   const updateRelationship = useWorkspaceStore((s) => s.updateRelationship)
   const deleteRelationship = useWorkspaceStore((s) => s.deleteRelationship)
   const confirmDelete = useWorkspaceStore((s) => s.confirmDelete)
+  const relationshipStyles = useWorkspaceStore((s) => s.relationshipStyles)
+  const setRelationshipStyle = useWorkspaceStore((s) => s.setRelationshipStyle)
+  const clearRelationshipStyle = useWorkspaceStore((s) => s.clearRelationshipStyle)
+  const perRel = relationshipStyles[relationship.id]
 
   const elementMap = useMemo(() => workspace ? buildElementMap(workspace) : new Map(), [workspace])
   const source = elementMap.get(relationship.sourceId)
@@ -604,6 +655,22 @@ function RelationshipProperties({ relationship, onClose }: { relationship: Relat
             )}
           </div>
         </div>
+        {/* Color (per-relationship override) */}
+        <div>
+          <FieldLabel>Color</FieldLabel>
+          <ColorPicker
+            value={perRel?.color ?? ''}
+            onChange={(v) => {
+              if (v) {
+                setRelationshipStyle(relationship.id, { color: v })
+              } else {
+                clearRelationshipStyle(relationship.id)
+              }
+            }}
+            presets={PRESET_COLORS}
+          />
+        </div>
+
         <ChangeStateField
           tags={relationship.tags}
           variant="relationship"

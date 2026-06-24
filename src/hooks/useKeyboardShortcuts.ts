@@ -81,20 +81,20 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
     if (store.workspace) {
       const dsl = serializeDSL(store.workspace)
       saveDSLFile(dsl, `${store.workspace.name ?? 'workspace'}.dsl`)
-      const sidecar = extractSidecar(store.workspace)
+      const sidecar = extractSidecar(store.workspace, store.elementStyles, store.relationshipStyles)
       if (sidecar) writeSidecarToHandle(serializeSidecar(sidecar))
     }
   },
   'mod+o': (store) => {
     openDSLFile().then(file => {
       if (!file) return
-      const { workspace, errors } = parseWorkspaceDocument({
+      const { workspace, errors, applied } = parseWorkspaceDocument({
         content: file.content,
         fallbackName: file.name.replace(/\.dsl$/, ''),
         sidecarJson: file.sidecarJson,
       })
       if (errors.length > 0) log.warn('DSL parse warnings', errors)
-      store.loadWorkspace(workspace)
+      store.loadWorkspace(workspace, applied?.elementStyles, applied?.relationshipStyles)
     })
   },
   'p': (store) => {
