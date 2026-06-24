@@ -86,7 +86,7 @@ function ChangeStateField({ tags, variant, onChange }: {
   )
 }
 
-type PanelTab = 'properties' | 'relations' | 'tags'
+type PanelTab = 'properties' | 'relations' | 'tags' | 'tables'
 
 const PANEL_TABS: { id: PanelTab; label: string }[] = [
   { id: 'properties', label: 'Properties' },
@@ -139,6 +139,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
   const tech = (element as Container | Component).technology
   const hasTech = element.type === 'container' || element.type === 'component'
   const hasLocation = element.type === 'person' || element.type === 'softwareSystem'
+  const isDatabase = element.type === 'container' && element.tags.includes('Database')
   const location = (element as Person | SoftwareSystem).location
   const typeColor = TYPE_COLORS[element.type] ?? 'var(--color-accent)'
   const safeUrl = element.url ? normalizeSafeExternalUrl(element.url) : null
@@ -223,7 +224,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
 
       {/* Tabs */}
       <div className="flex border-b px-1" style={{ borderColor: 'var(--color-border)' }} role="tablist" aria-label="Element details">
-        {PANEL_TABS.map(({ id, label }) => (
+        {PANEL_TABS.concat(isDatabase ? [{ id: 'tables' as PanelTab, label: 'Tables' }] : []).map(({ id, label }) => (
           <button
             key={id}
             role="tab"
@@ -388,6 +389,10 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
         {activeTab === 'relations' && <ElementRelationsTab elementId={element.id} />}
 
         {activeTab === 'tags' && <TagsTab tags={element.tags} onUpdate={(tags) => updateElement(element.id, { tags })} />}
+
+        {activeTab === 'tables' && isDatabase && (
+          <DatabaseTablesTab containerId={element.id} />
+        )}
       </div>
     </div>
   )
@@ -756,6 +761,201 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
           <Plus size={14} />
         </button>
       </div>
+    </div>
+  )
+}
+
+// ─── Database Tables Tab ──────────────────────────────────────────────
+
+function DatabaseTablesTab({ containerId }: { containerId: string }) {
+  const tableData = useWorkspaceStore((s) => s.tableData[containerId] ?? [])
+  const addTable = useWorkspaceStore((s) => s.addTable)
+  const updateTable = useWorkspaceStore((s) => s.updateTable)
+  const deleteTable = useWorkspaceStore((s) => s.deleteTable)
+  const addColumn = useWorkspaceStore((s) => s.addColumn)
+  const updateColumn = useWorkspaceStore((s) => s.updateColumn)
+  const deleteColumn = useWorkspaceStore((s) => s.deleteColumn)
+  const setMermaidOverlayContainerId = useWorkspaceStore((s) => s.setMermaidOverlayContainerId)
+  const [expandedTable, setExpandedTable] = useState<string | null>(null)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <button
+          className="btn-surface text-xs"
+          style={{ flex: 1 }}
+          onClick={() => {
+            const id = addTable(containerId, 'new_table')
+            setExpandedTable(id)
+          }}
+        >
+          + Add Table
+        </button>
+        <button
+          className="btn-surface text-xs"
+          style={{ flex: 1 }}
+          onClick={() => setMermaidOverlayContainerId(containerId)}
+          title="Open Mermaid ERD text editor"
+        >
+          Mermaid Editor
+        </button>
+      </div>
+
+      {tableData.length === 0 && (
+        <div className="text-xs" style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: 20 }}>
+          No tables defined. Add a table or open the Mermaid editor to create them from text.
+        </div>
+      )}
+
+      {tableData.map((table) => (
+        <div
+          key={table.id}
+          style={{
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Table header */}
+          <button
+            onClick={() => setExpandedTable(expandedTable === table.id ? null : table.id)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 12px',
+              background: 'var(--color-surface-2)',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--color-text-primary)',
+              fontSize: 12,
+              fontWeight: 600,
+              borderBottom: expandedTable === table.id ? '1px solid var(--color-border)' : 'none',
+            }}
+          >
+            <EditableField
+              value={table.name}
+              placeholder="Table name"
+              aria-label="Table name"
+              onCommit={(v) => updateTable(containerId, table.id, { name: v || 'untitled' })}
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                deleteTable(containerId, table.id)
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-text-muted)',
+                cursor: 'pointer',
+                fontSize: 14,
+                padding: '0 2px',
+              }}
+              title="Delete table"
+            >
+              ×
+            </button>
+          </button>
+
+          {/* Columns (expanded) */}
+          {expandedTable === table.id && (
+            <div style={{ padding: '4px 0' }}>
+              {table.columns.map((col, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '3px 12px',
+                    fontSize: 11,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={col.primaryKey}
+                    onChange={(e) => updateColumn(containerId, table.id, i, { primaryKey: e.target.checked })}
+                    title="Primary Key"
+                    style={{ width: 14, height: 14, accentColor: 'var(--color-accent)' }}
+                  />
+                  <input
+                    type="text"
+                    value={col.name}
+                    placeholder="col"
+                    onChange={(e) => updateColumn(containerId, table.id, i, { name: e.target.value })}
+                    style={{
+                      flex: 1,
+                      width: 60,
+                      padding: '2px 4px',
+                      background: 'var(--color-surface-1)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 3,
+                      color: 'var(--color-text-primary)',
+                      fontSize: 11,
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={col.type}
+                    placeholder="type"
+                    onChange={(e) => updateColumn(containerId, table.id, i, { type: e.target.value })}
+                    style={{
+                      width: 70,
+                      padding: '2px 4px',
+                      background: 'var(--color-surface-1)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 3,
+                      color: 'var(--color-text-primary)',
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                  <label title="Nullable" style={{ fontSize: 10, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <input
+                      type="checkbox"
+                      checked={col.nullable}
+                      onChange={(e) => updateColumn(containerId, table.id, i, { nullable: e.target.checked })}
+                      style={{ width: 12, height: 12, accentColor: 'var(--color-accent)' }}
+                    />
+                    N
+                  </label>
+                  <button
+                    onClick={() => deleteColumn(containerId, table.id, i)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-text-muted)',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                    }}
+                    title="Delete column"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => addColumn(containerId, table.id)}
+                style={{
+                  width: '100%',
+                  padding: '5px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-text-muted)',
+                  fontSize: 10,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  marginTop: 2,
+                }}
+              >
+                + Add Column
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
