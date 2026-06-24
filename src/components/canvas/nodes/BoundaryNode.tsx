@@ -24,14 +24,23 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  // Close menu on outside click
+  // Close menu on outside click (deferred to avoid conflict with the opening click)
   useEffect(() => {
     if (!menuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    const ref = menuRef.current
+    const id = setTimeout(() => {
+      const handler = (e: MouseEvent) => {
+        if (ref && !ref.contains(e.target as Node)) setMenuOpen(false)
+      }
+      document.addEventListener('mousedown', handler, true)
+      ;(ref as Record<string, unknown> | null)!.cleanup = () =>
+        document.removeEventListener('mousedown', handler, true)
+    }, 0)
+    return () => {
+      clearTimeout(id)
+      const cleanup = (ref as Record<string, unknown> | null)?.cleanup as (() => void) | undefined
+      if (cleanup) cleanup()
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
   }, [menuOpen])
 
   // Populated expand-in-place boundaries are draggable as a unit: the whole box
@@ -114,39 +123,45 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
                 </button>
                 {menuOpen && (
                   <div
-                    className="glass-flyout"
                     style={{
-                      position: 'fixed',
-                      top: 'auto',
-                      left: 'auto',
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      marginTop: 4,
                       zIndex: 9999,
                       minWidth: 170,
                       padding: 4,
-                    }}
-                    ref={(el) => {
-                      if (el) {
-                        const btn = el.previousSibling as HTMLElement | null
-                        if (btn) {
-                          const r = btn.getBoundingClientRect()
-                          el.style.top = (r.bottom + 4) + 'px'
-                          el.style.left = r.left + 'px'
-                        }
-                      }
+                      background: 'var(--color-surface-1)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                     }}
                   >
                     <button
-                      className="flyout-item"
+                      className="hover-lift"
                       onClick={(e) => { e.stopPropagation(); setMenuOpen(false); addChild() }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                        padding: '6px 10px', border: 'none', borderRadius: 'var(--radius-sm)',
+                        background: 'transparent', color: 'var(--color-text-secondary)',
+                        fontSize: 12, fontWeight: 500, cursor: 'pointer', textAlign: 'left',
+                      }}
                     >
-                      <span className="flyout-item-icon"><Box size={13} /></span>
-                      <span className="flyout-item-label">New Container</span>
+                      <Box size={13} />
+                      New Container
                     </button>
                     <button
-                      className="flyout-item"
+                      className="hover-lift"
                       onClick={(e) => { e.stopPropagation(); setMenuOpen(false); addChild('Database') }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                        padding: '6px 10px', border: 'none', borderRadius: 'var(--radius-sm)',
+                        background: 'transparent', color: 'var(--color-text-secondary)',
+                        fontSize: 12, fontWeight: 500, cursor: 'pointer', textAlign: 'left',
+                      }}
                     >
-                      <span className="flyout-item-icon" style={{ color: 'var(--color-type-container)' }}><Database size={13} /></span>
-                      <span className="flyout-item-label">New Database</span>
+                      <Database size={13} style={{ color: 'var(--color-type-container)' }} />
+                      New Database
                     </button>
                   </div>
                 )}

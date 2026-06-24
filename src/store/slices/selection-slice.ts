@@ -20,6 +20,8 @@ export const createSelectionSlice: StateCreator<
   selectedGroupId: null,
 
   selectElements: (ids) => set((s) => {
+    // Filter synthetic table node IDs — tables are not model elements
+    ids = ids.filter((id) => !id.startsWith('__table__'))
     s.selectedElementIds = ids
     s.selectedRelationshipId = null
     s.selectedGroupId = null

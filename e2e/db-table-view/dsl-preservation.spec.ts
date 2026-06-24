@@ -99,4 +99,45 @@ test.describe('DB table view — DSL preservation', () => {
     expect(tables!.length).toBeGreaterThan(0)
     expect(tables![0].name).toBe('test_users')
   })
+
+  test('expand system in-place then add Database container via boundary menu', async ({ workspace }) => {
+    await workspace.loadTemplate('bigBank')
+
+    // Find and expand the Internet Banking system in-place
+    const systemId = await workspace.page.evaluate(() => {
+      const ws = (window as Record<string, unknown>).__testGetWorkspace?.() as Record<string, unknown> | null
+      const systems = (ws?.model as Record<string, unknown> | undefined)
+        ?.softwareSystems as Array<Record<string, unknown>> | undefined
+      return systems?.find((s) => s.name === 'Internet Banking System')?.id as string ?? null
+    })
+
+    expect(systemId).not.toBeNull()
+
+    // Expand in-place via test hook
+    await workspace.page.evaluate(
+      (id) => (window as Record<string, unknown>).__testExpand?.(String(id)),
+      systemId,
+    )
+    await workspace.page.waitForTimeout(800)
+
+    // The expand boundary should appear
+    const boundary = workspace.page.locator(`[id="__expand_boundary__${systemId}"]`)
+    await expect(boundary).toBeVisible({ timeout: 5000 })
+
+    // Add a Database container via the store directly (simulating the menu click)
+    await workspace.page.evaluate((parentId) => {
+      const store = (window as Record<string, unknown>).__testStore?.() as Record<string, unknown>
+      const addContainer = store?.addContainer as ((systemId: string, name: string, position?: unknown, extraTag?: string, opts?: Record<string, unknown>) => string) | undefined
+      if (addContainer) {
+        addContainer(parentId, 'TestDB', undefined, 'Database', { skipActiveView: true })
+      }
+    }, systemId)
+
+    // Verify the container was created with Database tag
+    const ws = await workspace.getWorkspace()
+    const apiSys = ws!.model.softwareSystems.find((s) => s.name === 'Internet Banking System')
+    expect(apiSys).toBeDefined()
+    const dbContainer = apiSys!.containers.find((c) => c.tags.includes('Database') && c.name === 'TestDB')
+    expect(dbContainer).toBeDefined()
+  })
 })
