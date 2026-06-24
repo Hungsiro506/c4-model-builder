@@ -18,15 +18,19 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const collapseElement = useWorkspaceStore((s) => s.collapseElement)
   const addContainer = useWorkspaceStore((s) => s.addContainer)
   const addComponent = useWorkspaceStore((s) => s.addComponent)
+  const addTable = useWorkspaceStore((s) => s.addTable)
   const isSystem = data.typeLabel === 'Software System'
+  const isDatabase = data.typeLabel === 'Database'
   // Populated expand-in-place boundaries are draggable as a unit: the whole box
   // body grabs (children are separate nodes stacked on top, so they stay
   // interactive). Empty boundaries + scope/group boundaries stay pointer-
   // transparent so clicks/pans pass through to the canvas underneath.
   const bodyDraggable = !!data.collapsible && !data.empty
-  const emptyTitle = isSystem
-    ? 'Add containers to this system'
-    : 'Add components to this container'
+  const emptyTitle = isDatabase
+    ? 'Add tables to this database'
+    : isSystem
+      ? 'Add containers to this system'
+      : 'Add components to this container'
 
   // Expand-in-place add: create a child of the expanded element, shown inside
   // this boundary via the parent's expansion. skipActiveView keeps it out of
@@ -34,8 +38,15 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const addChild = () => {
     if (!data.elementId) return
     if (isSystem) addContainer(data.elementId, 'New Container', undefined, undefined, { skipActiveView: true })
+    else if (isDatabase) addTable(data.elementId, 'new_table')
     else addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
   }
+
+  const ariaLabel = isDatabase
+    ? `Add table to ${data.name}`
+    : isSystem
+      ? `Add container to ${data.name}`
+      : `Add component to ${data.name}`
 
   return (
     <>
@@ -83,7 +94,7 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
               className="c4-node-action-btn nodrag"
               style={{ marginTop: 1 }}
               onClick={(e) => { e.stopPropagation(); addChild() }}
-              aria-label={isSystem ? `Add container to ${data.name}` : `Add component to ${data.name}`}
+              aria-label={ariaLabel}
             >
               <Plus size={11} aria-hidden="true" />
             </button>
