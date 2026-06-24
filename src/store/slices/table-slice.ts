@@ -9,6 +9,8 @@ import { nanoid } from '../internals'
 export type TableSlice = Pick<WorkspaceState,
   | 'tableData'
   | 'mermaidText'
+  | 'mermaidOverlayContainerId'
+  | 'setMermaidOverlayContainerId'
   | 'addTable'
   | 'updateTable'
   | 'deleteTable'
@@ -35,6 +37,8 @@ export const createTableSlice: StateCreator<
 > = (set) => ({
   tableData: {},
   mermaidText: {},
+  mermaidOverlayContainerId: null,
+  setMermaidOverlayContainerId: (containerId) => set({ mermaidOverlayContainerId: containerId }),
 
   addTable: (containerId, name) => {
     const id = nanoid()

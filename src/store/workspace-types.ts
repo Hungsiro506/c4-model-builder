@@ -271,4 +271,7 @@ export interface WorkspaceState extends UndoState {
   /** Replace all tables for a container (e.g. from Mermaid parse). */
   setTablesForContainer: (containerId: string, tables: TableDef[]) => void
   setMermaidText: (containerId: string, text: string) => void
+  /** ID of the Database container whose Mermaid overlay is currently open (null = closed). */
+  mermaidOverlayContainerId: string | null
+  setMermaidOverlayContainerId: (containerId: string | null) => void
 }

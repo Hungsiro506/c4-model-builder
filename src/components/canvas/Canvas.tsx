@@ -49,6 +49,7 @@ import {
   EXPAND_BOUNDARY_PREFIX,
 } from './canvasBuilders'
 import { highlightActive } from '@/lib/highlight'
+import MermaidOverlay from './MermaidOverlay'
 import { canConnectElements } from '@/lib/connectionValidation'
 import { expandComposite } from '@/lib/expandComposite'
 import { axisForDirection, gapShiftMany, gapShiftCross, gapShiftCrossRect, EXPAND_MARGIN } from '@/lib/expandLayout'
@@ -387,6 +388,8 @@ export default function Canvas() {
 
   // Space-to-pan
   const [spaceHeld, setSpaceHeld] = useState(false)
+  const mermaidOverlayContainerId = useWorkspaceStore((s) => s.mermaidOverlayContainerId)
+  const setMermaidOverlayContainerId = useWorkspaceStore((s) => s.setMermaidOverlayContainerId)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !(e.target as HTMLElement).matches('input, textarea, select, [contenteditable]')) {
@@ -1391,6 +1394,22 @@ export default function Canvas() {
         </svg>
       </ReactFlow>
       {canvasGuideOpen && <CanvasGuide onClose={closeCanvasGuide} />}
+      {mermaidOverlayContainerId && (
+        <MermaidOverlay
+          containerId={mermaidOverlayContainerId}
+          containerName={(() => {
+            const workspace = useWorkspaceStore.getState().workspace
+            if (!workspace) return 'Database'
+            for (const sys of workspace.model.softwareSystems) {
+              for (const c of sys.containers) {
+                if (c.id === mermaidOverlayContainerId) return c.name
+              }
+            }
+            return 'Database'
+          })()}
+          onClose={() => setMermaidOverlayContainerId(null)}
+        />
+      )}
     </div>
   )
 }
