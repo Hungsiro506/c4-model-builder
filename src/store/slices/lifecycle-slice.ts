@@ -30,7 +30,7 @@ export const createLifecycleSlice: StateCreator<
     s.scopeViolations = s.workspace ? validateScope(s.workspace) : []
   }),
 
-  loadWorkspace: (workspace) => {
+  loadWorkspace: (workspace, appliedPerElement, appliedPerRelationship) => {
     const firstView = getFirstViewKey(workspace)
     set({
       workspace,
@@ -53,6 +53,9 @@ export const createLifecycleSlice: StateCreator<
       activeTeamFilter: [],
       lastClearedHighlightFilters: null,
       scopeViolations: validateScope(workspace),
+      // Seed per-element/relationship overrides from sidecar (or reset if none)
+      elementStyles: appliedPerElement ?? {},
+      relationshipStyles: appliedPerRelationship ?? {},
     })
   },
 
@@ -73,6 +76,8 @@ export const createLifecycleSlice: StateCreator<
       redoStack: [],
       lastClearedHighlightFilters: null,
       scopeViolations: [],
+      elementStyles: {},
+      relationshipStyles: {},
     }),
 
   updateWorkspaceMeta: (patch) => set((s) => {

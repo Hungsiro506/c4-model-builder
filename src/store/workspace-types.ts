@@ -103,12 +103,24 @@ export interface WorkspaceState extends UndoState {
   activeWorkspaceFilename: string | null
   setActiveWorkspaceFilename: (name: string | null) => void
 
+  // Per-element / per-relationship visual overrides (sidecar-backed, not in the
+  // workspace model). Applied on top of the tag cascade at render time.
+  elementStyles: Record<string, { background?: string; color?: string }>
+  relationshipStyles: Record<string, { color?: string }>
+  setElementStyle: (elementId: string, style: Partial<{ background: string; color: string }>) => void
+  clearElementStyle: (elementId: string) => void
+  setRelationshipStyle: (relationshipId: string, style: { color?: string }) => void
+  clearRelationshipStyle: (relationshipId: string) => void
+  /** Bulk-replace — used on workspace load to seed from the sidecar. */
+  replaceAllElementStyles: (styles: Record<string, { background?: string; color?: string }>) => void
+  replaceAllRelationshipStyles: (styles: Record<string, { color?: string }>) => void
+
   // Scope validation
   scopeViolations: ScopeViolation[]
   revalidateScope: () => void
 
   // Workspace lifecycle
-  loadWorkspace: (workspace: Workspace) => void
+  loadWorkspace: (workspace: Workspace, appliedPerElement?: Record<string, { background?: string; color?: string }>, appliedPerRelationship?: Record<string, { color?: string }>) => void
   closeWorkspace: () => void
   updateWorkspaceMeta: (patch: { name?: string; description?: string }) => void
 

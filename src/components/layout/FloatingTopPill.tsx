@@ -106,12 +106,12 @@ export default function FloatingTopPill() {
     setWsPickerOpen(false)
     const file = await readDSLFile(filename)
     if (!file) return
-    const { workspace } = parseWorkspaceDocument({
+    const { workspace, applied } = parseWorkspaceDocument({
       content: file.content,
       fallbackName: filename.replace(/\.dsl$/, ''),
       sidecarJson: file.sidecarJson,
     })
-    loadWorkspace(workspace)
+    loadWorkspace(workspace, applied?.elementStyles, applied?.relationshipStyles)
     useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
   }, [loadWorkspace])
 

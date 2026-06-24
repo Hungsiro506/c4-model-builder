@@ -35,7 +35,7 @@ export function ColorPicker({ value, onChange, presets }: {
         style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, borderRadius: 3, border: '1px solid var(--color-border)', background: value || 'transparent', cursor: 'pointer', padding: 0 }}
       />
       {showPresets && coords && createPortal(
-        <div ref={popupRef} style={{
+        <div ref={popupRef} data-anchored-popup="" style={{
           position: 'fixed',
           top: coords.top,
           left: coords.left,

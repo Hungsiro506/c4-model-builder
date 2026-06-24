@@ -46,11 +46,26 @@ interface SidecarView {
   expanded?: Record<string, SidecarExpandedElement>
 }
 
+/** Per-element visual override — stored in sidecar, rides on top of the tag cascade. */
+interface SidecarElementStyle {
+  background?: string
+  color?: string
+}
+
+/** Per-relationship visual override — stored in sidecar, rides on top of the tag cascade. */
+interface SidecarRelationshipStyle {
+  color?: string
+}
+
 export interface SidecarData {
   version: 1
   elements?: Record<string, SidecarElement>
   relationships?: Record<string, SidecarRelationship>
   views?: Record<string, SidecarView>
+  /** Per-element visual overrides keyed by element id. Only present when at least one override is set. */
+  elementStyles?: Record<string, SidecarElementStyle>
+  /** Per-relationship visual overrides keyed by relationship id. Only present when at least one override is set. */
+  relationshipStyles?: Record<string, SidecarRelationshipStyle>
 }
 
 function isSidecarElement(value: unknown): value is SidecarElement {
@@ -88,23 +103,64 @@ function isSidecarView(value: unknown): value is SidecarView {
   return true
 }
 
+function isSidecarElementStyle(value: unknown): value is SidecarElementStyle {
+  if (!isRecord(value)) return false
+  if ('background' in value && value.background !== undefined && typeof value.background !== 'string') return false
+  if ('color' in value && value.color !== undefined && typeof value.color !== 'string') return false
+  return true
+}
+
+function isSidecarRelationshipStyle(value: unknown): value is SidecarRelationshipStyle {
+  if (!isRecord(value)) return false
+  if ('color' in value && value.color !== undefined && typeof value.color !== 'string') return false
+  return true
+}
+
 function isSidecarData(value: unknown): value is SidecarData {
   if (!isRecord(value) || value.version !== 1) return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarElement)) return false
   if ('relationships' in value && value.relationships !== undefined && !isRecordOf(value.relationships, isSidecarRelationship)) return false
   if ('views' in value && value.views !== undefined && !isRecordOf(value.views, isSidecarView)) return false
+  if ('elementStyles' in value && value.elementStyles !== undefined && !isRecordOf(value.elementStyles, isSidecarElementStyle)) return false
+  if ('relationshipStyles' in value && value.relationshipStyles !== undefined && !isRecordOf(value.relationshipStyles, isSidecarRelationshipStyle)) return false
   return true
 }
 
 // ─── Extract sidecar from workspace ─────────────────────────────────
 
-export function extractSidecar(workspace: Workspace): SidecarData | null {
+/** Extract sidecar metadata from workspace state. Accepts optional per-element
+ *  and per-relationship style overrides (from the Zustand store) so they persist
+ *  alongside the DSL without polluting it. */
+export function extractSidecar(
+  workspace: Workspace,
+  elementStyles?: Record<string, SidecarElementStyle>,
+  relationshipStyles?: Record<string, SidecarRelationshipStyle>,
+): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
   let hasData = false
 
   // Note: status, owner, and lineStyle are now serialized in the DSL — not duplicated here.
   // SidecarElement + SidecarRelationship readers in applySidecar are kept for backward-compat
   // migration of existing sidecar files written by older versions of c4hero.
+
+  // Per-element visual overrides
+  if (elementStyles && Object.keys(elementStyles).length > 0) {
+    // Strip empty entries so the sidecar doesn't accumulate garbage
+    const clean: Record<string, SidecarElementStyle> = {}
+    for (const [id, style] of Object.entries(elementStyles)) {
+      if (style.background || style.color) clean[id] = style
+    }
+    if (Object.keys(clean).length > 0) { sidecar.elementStyles = clean; hasData = true }
+  }
+
+  // Per-relationship visual overrides
+  if (relationshipStyles && Object.keys(relationshipStyles).length > 0) {
+    const clean: Record<string, SidecarRelationshipStyle> = {}
+    for (const [id, style] of Object.entries(relationshipStyles)) {
+      if (style.color) clean[id] = style
+    }
+    if (Object.keys(clean).length > 0) { sidecar.relationshipStyles = clean; hasData = true }
+  }
 
   // Views: pinned elements
   const views: Record<string, SidecarView> = {}
@@ -138,8 +194,14 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
 
 // ─── Apply sidecar to workspace ─────────────────────────────────────
 
-export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
-  if (sidecar.version !== 1) return
+export interface AppliedSidecar {
+  elementStyles: Record<string, SidecarElementStyle>
+  relationshipStyles: Record<string, SidecarRelationshipStyle>
+}
+
+export function applySidecar(workspace: Workspace, sidecar: SidecarData): AppliedSidecar {
+  const applied: AppliedSidecar = { elementStyles: {}, relationshipStyles: {} }
+  if (sidecar.version !== 1) return applied
 
   // Elements — only apply known sidecar properties
   if (sidecar.elements) {
@@ -213,6 +275,26 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       }
     }
   }
+
+  // Per-element visual overrides — pass through so the caller can store them
+  // in the Zustand state (not the workspace model, which stays DSL-pure).
+  if (sidecar.elementStyles) {
+    for (const [id, style] of Object.entries(sidecar.elementStyles)) {
+      const clean: SidecarElementStyle = {}
+      if (typeof style.background === 'string') clean.background = style.background
+      if (typeof style.color === 'string') clean.color = style.color
+      if (clean.background || clean.color) applied.elementStyles[id] = clean
+    }
+  }
+
+  // Per-relationship visual overrides
+  if (sidecar.relationshipStyles) {
+    for (const [id, style] of Object.entries(sidecar.relationshipStyles)) {
+      if (typeof style.color === 'string') applied.relationshipStyles[id] = { color: style.color }
+    }
+  }
+
+  return applied
 }
 
 // ─── Sidecar filename ───────────────────────────────────────────────

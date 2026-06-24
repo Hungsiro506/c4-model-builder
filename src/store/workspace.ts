@@ -12,6 +12,7 @@ import { createViewSlice } from './slices/view-slice'
 import { createTagStyleSlice } from './slices/tag-style-slice'
 import { createUndoSlice } from './slices/undo-slice'
 import { createLifecycleSlice } from './slices/lifecycle-slice'
+import { createPerElementStyleSlice } from './slices/per-element-style-slice'
 
 export type { WorkspaceState, UndoState } from './workspace-types'
 export { BUILTIN_TAGS } from './builtin-tags'
@@ -46,6 +47,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     ...createSelectionSlice(...a),
     ...createNavigationSlice(...a),
     ...createLifecycleSlice(...a),
+    ...createPerElementStyleSlice(...a),
     ...createElementSlice(...a),
     ...createGroupSlice(...a),
     ...createRelationshipSlice(...a),

@@ -113,6 +113,8 @@ export interface ContentNodeContext {
   drillableIds: Set<string>
   onDrillIn: (elementId: string) => void
   viewCountMap: Map<string, number>
+  /** Per-element visual overrides — applied on top of the tag cascade (sidecar-backed). */
+  perElementStyles?: Record<string, { background?: string; color?: string }>
 }
 
 /** Build a single React Flow content node for an element at a given position.
@@ -123,7 +125,10 @@ export function buildContentNode(
   position: { x: number; y: number },
   ctx: ContentNodeContext,
 ): Node {
-  const style = getElementStyle(element, ctx.styleIndex)
+  const tagStyle = getElementStyle(element, ctx.styleIndex)
+  // Per-element override wins over the tag cascade (applied last).
+  const perElement = ctx.perElementStyles?.[element.id]
+  const style = perElement ? { ...tagStyle, ...perElement } : tagStyle
   const highlighted = ctx.active && isHighlighted(element, ctx.filters)
   return {
     id: element.id,
@@ -218,6 +223,7 @@ export function buildNodes(
   viewCountMap: Map<string, number>,
   drillableIds: Set<string>,
   themeStyles: ElementStyle[],
+  perElementStyles?: Record<string, { background?: string; color?: string }>,
 ): Node[] {
   const elementMap = buildElementMap(workspace)
   // Theme styles form the base layer. Truly custom workspace styles still
@@ -226,7 +232,7 @@ export function buildNodes(
   const styleIndex = buildElementStyleIndex(workspace, themeStyles)
 
   const active = highlightActive(filters)
-  const ctx: ContentNodeContext = { styleIndex, active, filters, drillableIds, onDrillIn, viewCountMap }
+  const ctx: ContentNodeContext = { styleIndex, active, filters, drillableIds, onDrillIn, viewCountMap, perElementStyles }
   const nodes: Node[] = []
 
   for (const viewEl of view.elements) {
@@ -550,8 +556,17 @@ function makeEdgeInfo(
   targetId: string,
   posMap: Map<string, { x: number; y: number }>,
   relationshipStyles: RelationshipStyle[],
+  perRelationshipStyles?: Record<string, { color?: string }>,
 ): EdgeInfo {
-  const relStyle = getRelationshipStyle(rel.tags, relationshipStyles)
+  const tagStyle = getRelationshipStyle(rel.tags, relationshipStyles)
+  // Per-relationship override wins over the tag cascade (applied last).
+  const perRel = perRelationshipStyles?.[rel.id]
+  let relStyle = tagStyle
+  if (perRel?.color) {
+    relStyle = relStyle
+      ? { ...relStyle, color: perRel.color }
+      : { tag: rel.tags[0] ?? 'Relationship', color: perRel.color }
+  }
   const srcPos = posMap.get(sourceId)
   const dstPos = posMap.get(targetId)
   const handles = srcPos && dstPos
@@ -841,6 +856,7 @@ export function buildEdges(
   view: View,
   nodes: Node[],
   filters: HighlightFilters,
+  perRelationshipStyles?: Record<string, { color?: string }>,
 ): Edge[] {
   const relationshipMap = buildRelationshipMap(workspace)
   const relationshipStyles = buildRelationshipStyleList(workspace)
@@ -856,7 +872,7 @@ export function buildEdges(
     const rel = relationshipMap.get(viewRel.id)
     if (!rel) continue
     if (!viewElementIds.has(rel.sourceId) || !viewElementIds.has(rel.destinationId)) continue
-    edgeInfos.push(makeEdgeInfo(rel, rel.sourceId, rel.destinationId, posMap, relationshipStyles))
+    edgeInfos.push(makeEdgeInfo(rel, rel.sourceId, rel.destinationId, posMap, relationshipStyles, perRelationshipStyles))
   }
 
   return assembleEdges(edgeInfos, posMap, nodes, filters)
@@ -895,6 +911,7 @@ export function buildCompositeEdges(
   workspace: Workspace,
   nodes: Node[],
   filters: HighlightFilters,
+  perRelationshipStyles?: Record<string, { color?: string }>,
 ): Edge[] {
   const relationshipStyles = buildRelationshipStyleList(workspace)
   const parentOf = buildParentMap(workspace)
@@ -968,7 +985,7 @@ export function buildCompositeEdges(
       existing.bundleCount = (existing.bundleCount ?? 1) + 1
       continue
     }
-    const info = makeEdgeInfo(rel, s, t, posMap, relationshipStyles)
+    const info = makeEdgeInfo(rel, s, t, posMap, relationshipStyles, perRelationshipStyles)
     info.bundleCount = 1
     byPair.set(key, info)
     edgeInfos.push(info)

@@ -376,7 +376,7 @@ export function getCommands(reactFlow: ReactFlowInstance | null): Command[] {
         const s = store()
         if (!s.workspace) return
         const dsl = serializeDSL(s.workspace)
-        const sidecar = extractSidecar(s.workspace)
+        const sidecar = extractSidecar(s.workspace, s.elementStyles, s.relationshipStyles)
         await getActiveStore().save({
           content: dsl,
           sidecarJson: sidecar ? serializeSidecar(sidecar) : undefined,

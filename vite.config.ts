@@ -32,7 +32,7 @@ export default defineConfig({
       },
     },
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['c4-logo.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'c4hero',

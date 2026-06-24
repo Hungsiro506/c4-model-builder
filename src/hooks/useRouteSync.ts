@@ -154,14 +154,14 @@ export function useRefreshRedirect() {
       }
 
       // 3. Parse, apply sidecar, load into store
-      const { workspace: parsed, errors } = parseWorkspaceDocument({
+      const { workspace: parsed, errors, applied } = parseWorkspaceDocument({
         content: file.content,
         fallbackName: workspaceSlug,
         sidecarJson: file.sidecarJson,
       })
       if (errors.length > 0) log.warn('DSL parse warnings', errors)
 
-      useWorkspaceStore.getState().loadWorkspace(parsed)
+      useWorkspaceStore.getState().loadWorkspace(parsed, applied?.elementStyles, applied?.relationshipStyles)
       useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
 
       // 4. Restore the active view from the URL (loadWorkspace picks the first

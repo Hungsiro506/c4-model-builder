@@ -287,13 +287,13 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     try {
       const file = await readDSLFile(filename)
       if (!file) return
-      const { workspace, errors } = parseWorkspaceDocument({
+      const { workspace, errors, applied } = parseWorkspaceDocument({
         content: file.content,
         fallbackName: filename.replace(/\.dsl$/, ''),
         sidecarJson: file.sidecarJson,
       })
       if (errors.length > 0) log.warn("DSL parse warnings", errors)
-      loadWorkspace(workspace)
+      loadWorkspace(workspace, applied?.elementStyles, applied?.relationshipStyles)
       useWorkspaceStore.getState().setActiveWorkspaceFilename(filename)
     } finally {
       setLoadingWorkspace(null)
@@ -452,13 +452,13 @@ export default function WelcomeScreen({ initialView }: { initialView?: 'startup'
     const name = result.ref.name
     setLoadingWorkspace(name.replace(/\.dsl$/, ''))
     try {
-      const { workspace, errors } = parseWorkspaceDocument({
+      const { workspace, errors, applied } = parseWorkspaceDocument({
         content: result.content,
         fallbackName: name.replace(/\.dsl$/, ''),
         sidecarJson: result.sidecarJson,
       })
       if (errors.length > 0) log.warn("DSL parse warnings", errors)
-      loadWorkspace(workspace)
+      loadWorkspace(workspace, applied?.elementStyles, applied?.relationshipStyles)
     } finally {
       setLoadingWorkspace(null)
     }

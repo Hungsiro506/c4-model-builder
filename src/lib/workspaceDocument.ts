@@ -1,6 +1,6 @@
 import type { Workspace } from '@/types/model'
 import { parseDSL, type ParseError } from '@/lib/dsl'
-import { applySidecar, parseSidecar } from '@/lib/sidecar'
+import { applySidecar, parseSidecar, type AppliedSidecar } from '@/lib/sidecar'
 
 export interface WorkspaceDocumentInput {
   content: string
@@ -11,6 +11,9 @@ export interface WorkspaceDocumentInput {
 export interface WorkspaceDocumentResult {
   workspace: Workspace
   errors: ParseError[]
+  /** Per-element and per-relationship visual overrides from the sidecar
+   *  (separate from the DSL model so the .dsl stays pure Structurizr). */
+  applied?: AppliedSidecar
 }
 
 export function parseWorkspaceDocument({
@@ -22,7 +25,7 @@ export function parseWorkspaceDocument({
   if (!workspace.name && fallbackName) workspace.name = fallbackName
 
   const sidecar = sidecarJson ? parseSidecar(sidecarJson) : null
-  if (sidecar) applySidecar(workspace, sidecar)
+  const applied = sidecar ? applySidecar(workspace, sidecar) : undefined
 
-  return { workspace, errors }
+  return { workspace, errors, applied }
 }

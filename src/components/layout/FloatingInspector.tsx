@@ -31,6 +31,9 @@ export default function FloatingInspector() {
       // pane / node handlers already manage selection.
       const inCanvas = (target as Element).closest?.('.react-flow, [data-canvas-chrome]')
       if (inCanvas) return
+      // Don't dismiss when clicking inside an anchored popup (e.g. ColorPicker
+      // preset chips rendered via portal to document.body).
+      if ((target as Element).closest?.('[data-anchored-popup]')) return
       clearSelection()
     }
     document.addEventListener('mousedown', onDocPointer)
