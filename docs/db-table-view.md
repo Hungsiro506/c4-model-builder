@@ -3,8 +3,8 @@
 Context doc for AI-assisted development. Records what was built and **why**.
 Keep current as the feature changes.
 
-> Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
-> PR B1 + B2 pending.
+> Status: **Draft / Spike** (2026-06-25). Branch `feat/db-table-view` (PR #16).
+> All core pieces prototyped and working. Plan to split into 3 clean PRs.
 
 ## Problem
 
@@ -136,10 +136,6 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - No dropdown `useState` inside React Flow nodes (causes re-render loops)
 
 ## Progress log
-
-### 2026-06-25 — PR A merged (PR #18)
-- Foundation layer: types, Mermaid parser/generator, sidecar tables, table-slice store.
-- 46 new tests. No UI. squash-merged as `feat: add database table view foundation layer`.
 
 ### 2026-06-25 — spike complete, split plan locked (PR #16)
 - All pieces working end-to-end. 15+ commits on `feat/db-table-view`.
