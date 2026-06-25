@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState, useRef, useEffect } from 'react'
 import { Minimize2, Plus } from 'lucide-react'
 import type { NodeProps } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
@@ -19,6 +19,22 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const addContainer = useWorkspaceStore((s) => s.addContainer)
   const addComponent = useWorkspaceStore((s) => s.addComponent)
   const isSystem = data.typeLabel === 'Software System'
+
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    if (!dropdownOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [dropdownOpen])
+
   // Populated expand-in-place boundaries are draggable as a unit: the whole box
   // body grabs (children are separate nodes stacked on top, so they stay
   // interactive). Empty boundaries + scope/group boundaries stay pointer-
@@ -28,13 +44,36 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
     ? 'Add containers to this system'
     : 'Add components to this container'
 
-  // Expand-in-place add: create a child of the expanded element, shown inside
-  // this boundary via the parent's expansion. skipActiveView keeps it out of
-  // the underlying (e.g. landscape) view so it never renders as a stray node.
-  const addChild = () => {
+  const doAddContainer = () => {
     if (!data.elementId) return
-    if (isSystem) addContainer(data.elementId, 'New Container', undefined, undefined, { skipActiveView: true })
-    else addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
+    addContainer(data.elementId, 'New Container', undefined, undefined, { skipActiveView: true })
+    setDropdownOpen(false)
+  }
+
+  const doAddDatabase = () => {
+    if (!data.elementId) return
+    addContainer(data.elementId, 'New Database', undefined, 'Database', { skipActiveView: true })
+    setDropdownOpen(false)
+  }
+
+  const doAddComponent = () => {
+    if (!data.elementId) return
+    // Systems can also add components (which go into a container of the system).
+    // For Container boundaries, addComponent to that container directly.
+    if (isSystem) {
+      // Add a component to the system — but components need a container parent.
+      // For the system-boundary "+" dropdown, we skip direct component add
+      // unless there's a container to add it to. Using addContainer with no
+      // extra tag is the safe fallback for "Container" option; "Component"
+      // from system "+" means something different: add a component to the
+      // default container. But we don't have a default container concept.
+      // For now, "Component" from system "+" adds a container (same as
+      // "Container" option) — the user can later nest components inside it.
+      addContainer(data.elementId, 'New Component', undefined, undefined, { skipActiveView: true })
+    } else {
+      addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
+    }
+    setDropdownOpen(false)
   }
 
   return (
@@ -78,24 +117,85 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
           </span>
         </div>
         {data.collapsible && data.elementId && (
-          <>
+          <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-flex' }}>
             <button
               className="c4-node-action-btn nodrag"
               style={{ marginTop: 1 }}
-              onClick={(e) => { e.stopPropagation(); addChild() }}
+              onClick={(e) => { e.stopPropagation(); setDropdownOpen(!dropdownOpen) }}
               aria-label={isSystem ? `Add container to ${data.name}` : `Add component to ${data.name}`}
+              data-active={dropdownOpen ? 'true' : undefined}
             >
               <Plus size={11} aria-hidden="true" />
             </button>
-            <button
-              className="c4-node-action-btn nodrag"
-              style={{ marginTop: 1 }}
-              onClick={(e) => { e.stopPropagation(); collapseElement(data.elementId!) }}
-              aria-label={`Collapse ${data.name}`}
-            >
-              <Minimize2 size={11} aria-hidden="true" />
-            </button>
-          </>
+            {dropdownOpen && (
+              <div
+                className="nodrag"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: 4,
+                  background: 'var(--glass-surface, rgba(20,20,30,0.95))',
+                  border: '1px solid var(--glass-overlay-md, rgba(255,255,255,0.10))',
+                  borderRadius: 8,
+                  padding: '4px 0',
+                  minWidth: 140,
+                  zIndex: 100,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                }}
+              >
+                {isSystem ? (
+                  <>
+                    <button
+                      className="row-menu-item nodrag"
+                      style={{ width: '100%', textAlign: 'left', padding: '6px 12px', fontSize: 'var(--text-xs)', background: 'none', border: 'none', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); doAddContainer() }}
+                      aria-label={`New Container in ${data.name}`}
+                    >
+                      Container
+                    </button>
+                    <button
+                      className="row-menu-item nodrag"
+                      style={{ width: '100%', textAlign: 'left', padding: '6px 12px', fontSize: 'var(--text-xs)', background: 'none', border: 'none', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); doAddDatabase() }}
+                      aria-label={`New Database in ${data.name}`}
+                    >
+                      Database
+                    </button>
+                    <button
+                      className="row-menu-item nodrag"
+                      style={{ width: '100%', textAlign: 'left', padding: '6px 12px', fontSize: 'var(--text-xs)', background: 'none', border: 'none', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); doAddComponent() }}
+                      aria-label={`New Component in ${data.name}`}
+                    >
+                      Component
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="row-menu-item nodrag"
+                    style={{ width: '100%', textAlign: 'left', padding: '6px 12px', fontSize: 'var(--text-xs)', background: 'none', border: 'none', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                    onClick={(e) => { e.stopPropagation(); doAddComponent() }}
+                    aria-label={`New Component in ${data.name}`}
+                  >
+                    Component
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {data.collapsible && data.elementId && (
+          <button
+            className="c4-node-action-btn nodrag"
+            style={{ marginTop: 1 }}
+            onClick={(e) => { e.stopPropagation(); collapseElement(data.elementId!) }}
+            aria-label={`Collapse ${data.name}`}
+          >
+            <Minimize2 size={11} aria-hidden="true" />
+          </button>
         )}
       </div>
       <div

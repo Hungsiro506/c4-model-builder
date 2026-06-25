@@ -862,6 +862,13 @@ export function buildEdges(
   return assembleEdges(edgeInfos, posMap, nodes, filters)
 }
 
+/** Check if a model element is a Container tagged as "Database".
+ *  Used by expand-in-place and boundary "+" dropdown to offer DB-specific
+ *  affordances (table rendering, Database creation shortcut). */
+export function isDatabaseContainer(element: ModelElement): boolean {
+  return element.type === 'container' && element.tags.includes('Database')
+}
+
 /** Build a child→parent id map for the whole model (container→system,
  *  component→container). People and systems have no parent. */
 export function buildParentMap(workspace: Workspace): Map<string, string> {
