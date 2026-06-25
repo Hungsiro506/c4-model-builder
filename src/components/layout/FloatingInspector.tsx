@@ -7,6 +7,7 @@ export default function FloatingInspector() {
   const selectedIds = useWorkspaceStore((s) => s.selectedElementIds)
   const selectedRelId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const selectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
+  const selectedTable = useWorkspaceStore((s) => s.selectedTable)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -14,9 +15,10 @@ export default function FloatingInspector() {
   const hasElement = !!workspace && selectedIds.length > 0 && getSelectedElement(workspace, selectedIds) !== undefined
   const hasRelationship = !!workspace && selectedRelId !== null && getRelationshipById(workspace, selectedRelId) !== undefined
   const hasGroup = !!workspace && selectedGroupId !== null && workspace.model.groups.some(g => g.id === selectedGroupId)
+  const hasTable = selectedTable !== null
 
-  // Only render when a node, relationship, or group is explicitly selected
-  const visible = hasElement || hasRelationship || hasGroup
+  // Render when a node, relationship, group, or table is explicitly selected
+  const visible = hasElement || hasRelationship || hasGroup || hasTable
 
   // Dismiss on outside click. Clicks on canvas nodes/edges run their own
   // selection logic synchronously after this mousedown clears, so they end
@@ -32,6 +34,7 @@ export default function FloatingInspector() {
       const inCanvas = (target as Element).closest?.('.react-flow, [data-canvas-chrome]')
       if (inCanvas) return
       clearSelection()
+      useWorkspaceStore.getState().clearTableSelection()
     }
     document.addEventListener('mousedown', onDocPointer)
     document.addEventListener('touchstart', onDocPointer)

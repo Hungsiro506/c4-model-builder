@@ -181,32 +181,32 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
 
       {/* Add column */}
       <div className="px-3 py-2 border-t border-white/5 shrink-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <input
             type="text"
             value={newColName}
             onChange={(e) => setNewColName(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs"
+            className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded px-1.5 py-1 text-xs"
             style={{ color: 'var(--color-text-primary)' }}
-            placeholder="Column name"
+            placeholder="Col name"
           />
           <input
             type="text"
             value={newColType}
             onChange={(e) => setNewColType(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-20 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs font-mono"
+            className="w-14 bg-white/5 border border-white/10 rounded px-1 py-1 text-xxs font-mono"
             style={{ color: 'var(--color-text-muted)' }}
-            placeholder="varchar"
+            placeholder="type"
           />
           <button
             onClick={handleAddColumn}
             disabled={!newColName.trim()}
-            className="p-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30"
+            className="shrink-0 p-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30"
             aria-label="Add column"
           >
-            <Plus size={14} />
+            <Plus size={12} />
           </button>
         </div>
       </div>
