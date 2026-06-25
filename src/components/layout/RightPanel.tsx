@@ -767,8 +767,11 @@ function TagsTab({ tags, onUpdate }: { tags: string[]; onUpdate: (tags: string[]
 
 // ─── Database Tables Tab ──────────────────────────────────────────────
 
+// Stable empty array ref — avoids infinite re-render from ?? [] in selector
+const EMPTY_TABLE_LIST: never[] = []
+
 function DatabaseTablesTab({ containerId }: { containerId: string }) {
-  const tableData = useWorkspaceStore((s) => s.tableData[containerId] ?? [])
+  const tableData = useWorkspaceStore((s) => s.tableData[containerId]) ?? EMPTY_TABLE_LIST
   const addTable = useWorkspaceStore((s) => s.addTable)
   const updateTable = useWorkspaceStore((s) => s.updateTable)
   const deleteTable = useWorkspaceStore((s) => s.deleteTable)
