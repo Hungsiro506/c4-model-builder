@@ -830,6 +830,14 @@ export function buildExpandBoundaryNodes(
     !contentNodes.some((n) => ancestorIsExpanded(n.id, id))
     && ![...rectById.keys()].some((o) => o !== id && ancestorIsExpanded(o, id))
 
+  // Detect Database containers for boundary labeling
+  const dbContainerIds = new Set<string>()
+  for (const sys of workspace.model.softwareSystems) {
+    for (const c of sys.containers) {
+      if (c.tags.includes('Database')) dbContainerIds.add(c.id)
+    }
+  }
+
   const ordered = [...expandedIds].sort((a, b) => depthOf(b) - depthOf(a))
   const boundaries: Node[] = []
   for (const expandedId of ordered) {
@@ -851,7 +859,7 @@ export function buildExpandBoundaryNodes(
         position: { x, y },
         measured: { width: w, height: h },
         style: { width: w, height: h, pointerEvents: 'none' },
-        data: { name: info.name, typeLabel, empty: true, collapsible: true, elementId: expandedId },
+        data: { name: info.name, typeLabel, empty: true, collapsible: true, elementId: expandedId, isDatabase: dbContainerIds.has(expandedId) },
         zIndex: -5 + depthOf(expandedId),
         selectable: false,
         draggable: false,
@@ -870,7 +878,7 @@ export function buildExpandBoundaryNodes(
       // separate, higher-z React Flow nodes stacked on top, so they stay
       // interactive; `.nodrag` buttons in the header stay clickable.
       style: { width: w, height: h, pointerEvents: 'auto' },
-      data: { name: info.name, typeLabel, collapsible: true, elementId: expandedId },
+      data: { name: info.name, typeLabel, collapsible: true, elementId: expandedId, isDatabase: dbContainerIds.has(expandedId) },
       // Deeper boxes sit above their parent box but still behind content (>= 0).
       zIndex: -5 + depthOf(expandedId),
       selectable: false,

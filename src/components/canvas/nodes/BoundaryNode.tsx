@@ -12,6 +12,8 @@ interface BoundaryNodeData {
    *  element's children back into a single collapsed node. */
   collapsible?: boolean
   elementId?: string
+  /** True when the expanded element is a Database container. */
+  isDatabase?: boolean
 }
 
 function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }) {
@@ -20,7 +22,7 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const addComponent = useWorkspaceStore((s) => s.addComponent)
   const addTable = useWorkspaceStore((s) => s.addTable)
   const isSystem = data.typeLabel === 'Software System'
-  const isDatabase = data.typeLabel === 'Database'
+  const isDatabase = data.isDatabase === true
 
   const bodyDraggable = !!data.collapsible && !data.empty
   const emptyTitle = isDatabase
