@@ -131,12 +131,12 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
                   width: 16,
                   flexShrink: 0,
                   textAlign: 'center',
-                  color: col.foreignKey ? '#4ade80' : 'transparent',
+                  color: col.isForeignKey ? '#4ade80' : 'transparent',
                   fontSize: 10,
                 }}
-                title={col.foreignKey ? `FK → ${col.foreignKey}` : undefined}
+                title={col.isForeignKey ? 'Foreign Key' : undefined}
               >
-                {col.foreignKey && <ArrowRightLeft size={10} style={{ display: 'inline' }} />}
+                {col.isForeignKey && <ArrowRightLeft size={10} style={{ display: 'inline' }} />}
               </span>
               {/* Column name */}
               <span
@@ -165,18 +165,6 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
                 }}
               >
                 {col.type}
-              </span>
-              {/* Nullable */}
-              <span
-                style={{
-                  width: 16,
-                  textAlign: 'right',
-                  fontSize: 10,
-                  color: col.nullable ? 'var(--color-text-subtle)' : 'transparent',
-                }}
-                title={col.nullable ? 'Nullable' : undefined}
-              >
-                {col.nullable ? 'N' : ''}
               </span>
             </div>
           ))

@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { describe, it, expect, afterEach } from 'vitest'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { ReactFlowProvider } from '@xyflow/react'
 import TableNode, { type TableNodeData } from './TableNode'
 import { useWorkspaceStore } from '@/store/workspace'
@@ -83,26 +83,15 @@ describe('TableNode', () => {
     expect(pkSpan.querySelector('svg')).toBeTruthy()
   })
 
-  it('shows nullable indicator N for nullable columns', () => {
-    renderTable({
-      tableDef: {
-        id: 't1', name: 'Users',
-        columns: [{ name: 'nickname', type: 'varchar', nullable: true }],
-      },
-      containerId: 'db1',
-    })
-    expect(screen.getByText('N')).toBeTruthy()
-  })
-
   it('shows FK icon for foreign key columns', () => {
     renderTable({
       tableDef: {
         id: 't1', name: 'Users',
-        columns: [{ name: 'org_id', type: 'int', foreignKey: 'orgs.id' }],
+        columns: [{ name: 'org_id', type: 'int', isForeignKey: true }],
       },
       containerId: 'db1',
     })
-    const fkSpan = screen.getByTitle('FK → orgs.id')
+    const fkSpan = screen.getByTitle('Foreign Key')
     expect(fkSpan).toBeTruthy()
     expect(fkSpan.querySelector('svg')).toBeTruthy()
   })

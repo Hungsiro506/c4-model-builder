@@ -1,6 +1,6 @@
-import { useState, type FormEvent, useCallback } from 'react'
+import { useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
-import { X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { X, Plus, Trash2 } from 'lucide-react'
 import { TYPE_COLORS } from '@/lib/elementMeta'
 
 // Stable empty array ref — avoids infinite re-render from ?? [] in selector
@@ -19,31 +19,30 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
   const addColumn = useWorkspaceStore((s) => s.addColumn)
   const updateColumn = useWorkspaceStore((s) => s.updateColumn)
   const deleteColumn = useWorkspaceStore((s) => s.deleteColumn)
-  const moveColumn = useWorkspaceStore((s) => s.moveColumn)
   // Each column now stores an id. We find it by index when updating.
 
   const table = tableData.find((t) => t.id === tableId)
   const [newColName, setNewColName] = useState('')
   const [newColType, setNewColType] = useState('varchar')
 
-  const handleAddColumn = useCallback(() => {
+  const handleAddColumn = () => {
     if (!newColName.trim()) return
     addColumn(containerId, tableId, newColName.trim(), newColType.trim() || 'varchar')
     setNewColName('')
     setNewColType('varchar')
-  }, [addColumn, containerId, tableId, newColName, newColType])
+  }
 
-  const handleDeleteTable = useCallback(() => {
+  const handleDeleteTable = () => {
     deleteTable(containerId, tableId)
     onClose()
-  }, [deleteTable, containerId, tableId, onClose])
+  }
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       handleAddColumn()
     }
-  }, [handleAddColumn])
+  }
 
   if (!table) {
     return (
@@ -153,18 +152,6 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                 style={{ color: 'var(--color-text-muted)' }}
                 placeholder="type"
               />
-
-              {/* Nullable toggle */}
-              <button
-                onClick={() => updateColumn(containerId, tableId, colId as string, { nullable: !col.nullable })}
-                className={`w-5 h-5 rounded text-xxs ${
-                  col.nullable ? 'text-blue-400 bg-blue-400/10' : 'text-muted hover:bg-white/5'
-                }`}
-                title={col.nullable ? 'Nullable (click to remove)' : 'Set as Nullable'}
-                aria-label={`Toggle nullable for ${col.name || `col_${i + 1}`}`}
-              >
-                N
-              </button>
 
               {/* Delete */}
               <button
