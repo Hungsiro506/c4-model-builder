@@ -90,6 +90,9 @@ Hard-won from building the shipped features. Every AI session must follow them.
 
 ### Branching & Commits
 
+- **All changes go through PR.** No direct push to `main`. Every commit — even
+  one-line doc fixes — must go through a feature branch + squash-merge PR so
+  every change is tracked, reviewed, and reversible.
 - **Feature branches off `main`** — one per feature, independent, disjoint files.
   Merge in any order, no conflicts. `integration` is a local preview only (never merge it).
 - **Squash-merge + Conventional Commit PR titles** (`feat:`, `fix:`, `ci:`, `docs:`,
