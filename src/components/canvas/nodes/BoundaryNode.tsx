@@ -12,13 +12,17 @@ interface BoundaryNodeData {
    *  element's children back into a single collapsed node. */
   collapsible?: boolean
   elementId?: string
+  /** True when the boundary wraps a Database container. */
+  isDatabase?: boolean
 }
 
 function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }) {
   const collapseElement = useWorkspaceStore((s) => s.collapseElement)
   const addContainer = useWorkspaceStore((s) => s.addContainer)
   const addComponent = useWorkspaceStore((s) => s.addComponent)
+  const addTable = useWorkspaceStore((s) => s.addTable)
   const isSystem = data.typeLabel === 'Software System'
+  const isDatabase = data.isDatabase === true
 
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -61,6 +65,13 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
     // Only Container boundaries offer Component add (L2→L3 expand).
     // System boundaries (L1→L2) don't — Components live inside Containers.
     addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
+    setDropdownOpen(false)
+  }
+
+  const doAddTable = () => {
+    if (!data.elementId) return
+    // Database containers: add a table to tableData (sidecar), not model
+    addTable(data.elementId, 'new_table')
     setDropdownOpen(false)
   }
 
@@ -110,7 +121,7 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
               className="c4-node-action-btn nodrag"
               style={{ marginTop: 1 }}
               onClick={(e) => { e.stopPropagation(); setDropdownOpen(!dropdownOpen) }}
-              aria-label={isSystem ? `Add container to ${data.name}` : `Add component to ${data.name}`}
+              aria-label={isSystem ? `Add container to ${data.name}` : isDatabase ? `Add table to ${data.name}` : `Add component to ${data.name}`}
               data-active={dropdownOpen ? 'true' : undefined}
             >
               <Plus size={11} aria-hidden="true" />
@@ -153,6 +164,15 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
                       Database
                     </button>
                   </>
+                ) : isDatabase ? (
+                  <button
+                    className="row-menu-item nodrag"
+                    style={{ width: '100%', textAlign: 'left', padding: '6px 12px', fontSize: 'var(--text-xs)', background: 'none', border: 'none', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                    onClick={(e) => { e.stopPropagation(); doAddTable() }}
+                    aria-label={`New Table in ${data.name}`}
+                  >
+                    Table
+                  </button>
                 ) : (
                   <button
                     className="row-menu-item nodrag"
