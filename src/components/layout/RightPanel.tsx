@@ -242,7 +242,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4" role="tabpanel" aria-label={activeTab}>
+      <div className="flex-1 overflow-auto p-4" role="tabpanel" aria-label={activeTab}>
         {activeTab === 'properties' && (
           <div className="space-y-4">
             <div>
@@ -880,83 +880,72 @@ function DatabaseTablesTab({ containerId }: { containerId: string }) {
 
           {/* Columns editor (expanded) */}
           {expandedTable === table.id && (
-            <div style={{ padding: '2px 0' }}>
+            <div>
               {table.columns.map((col, i) => (
                 <div
                   key={i}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    padding: '4px 10px',
+                    padding: '6px 10px',
+                    borderBottom: '1px solid var(--color-border)',
                   }}
                 >
-                  {/* PK checkbox */}
-                  <input
-                    type="checkbox"
-                    checked={col.primaryKey}
-                    onChange={(e) => updateColumn(containerId, table.id, i, { primaryKey: e.target.checked })}
-                    title="Primary Key"
-                    style={{ width: 14, height: 14, accentColor: 'var(--color-accent)', flexShrink: 0 }}
-                  />
-                  {/* Column name */}
-                  <input
-                    type="text"
-                    value={col.name}
-                    placeholder="name"
-                    onChange={(e) => updateColumn(containerId, table.id, i, { name: e.target.value })}
-                    style={{ ...inputStyle, flex: 1, minWidth: 50, fontSize: 11, padding: '3px 6px' }}
-                  />
-                  {/* Column type */}
-                  <input
-                    type="text"
-                    value={col.type}
-                    placeholder="type"
-                    onChange={(e) => updateColumn(containerId, table.id, i, { type: e.target.value })}
-                    style={{
-                      ...inputStyle,
-                      width: 80,
-                      fontSize: 11,
-                      padding: '3px 6px',
-                      fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
-                      flexShrink: 0,
-                    }}
-                  />
-                  {/* Nullable toggle */}
-                  <label
-                    title={col.nullable ? 'Nullable (click to set NOT NULL)' : 'NOT NULL (click to set nullable)'}
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: col.nullable ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 2,
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                      minWidth: 22,
-                    }}
-                  >
+                  {/* Row 1: name + type */}
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
                     <input
-                      type="checkbox"
-                      checked={col.nullable}
-                      onChange={(e) => updateColumn(containerId, table.id, i, { nullable: e.target.checked })}
-                      style={{ width: 12, height: 12, accentColor: 'var(--color-accent)' }}
+                      type="text"
+                      value={col.name}
+                      placeholder="Column name"
+                      onChange={(e) => updateColumn(containerId, table.id, i, { name: e.target.value })}
+                      style={{ ...inputStyle, flex: 1, fontSize: 11, padding: '3px 6px' }}
                     />
-                    N
-                  </label>
-                  {/* Delete column */}
-                  <button
-                    onClick={() => deleteColumn(containerId, table.id, i)}
-                    style={{
-                      background: 'none', border: 'none',
-                      color: 'var(--color-text-muted)', cursor: 'pointer',
-                      fontSize: 14, padding: 0, lineHeight: 1, flexShrink: 0,
-                    }}
-                    title="Delete column"
-                  >
-                    ×
-                  </button>
+                    <input
+                      type="text"
+                      value={col.type}
+                      placeholder="type"
+                      onChange={(e) => updateColumn(containerId, table.id, i, { type: e.target.value })}
+                      style={{
+                        ...inputStyle,
+                        width: 90,
+                        fontSize: 11,
+                        padding: '3px 6px',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+                        flexShrink: 0,
+                      }}
+                    />
+                  </div>
+                  {/* Row 2: toggles + delete */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: col.primaryKey ? 'var(--color-type-person)' : 'var(--color-text-muted)' }}>
+                      <input
+                        type="checkbox"
+                        checked={col.primaryKey}
+                        onChange={(e) => updateColumn(containerId, table.id, i, { primaryKey: e.target.checked })}
+                        style={{ width: 12, height: 12, accentColor: 'var(--color-accent)' }}
+                      />
+                      PK
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: col.nullable ? 'var(--color-text-muted)' : 'var(--color-text-primary)' }}>
+                      <input
+                        type="checkbox"
+                        checked={col.nullable}
+                        onChange={(e) => updateColumn(containerId, table.id, i, { nullable: e.target.checked })}
+                        style={{ width: 12, height: 12, accentColor: 'var(--color-accent)' }}
+                      />
+                      Nullable
+                    </label>
+                    <div style={{ flex: 1 }} />
+                    <button
+                      onClick={() => deleteColumn(containerId, table.id, i)}
+                      style={{
+                        background: 'none', border: 'none',
+                        color: 'var(--color-text-muted)', cursor: 'pointer',
+                        fontSize: 14, padding: 0, lineHeight: 1,
+                      }}
+                      title="Delete column"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               ))}
               <button
