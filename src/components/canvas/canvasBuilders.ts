@@ -821,7 +821,7 @@ export function buildExpandBoundaryNodes(
   // Rects deepest-first so an outer (e.g. system) boundary wraps the inner
   // (e.g. container) box — see computeExpandBoundaryRects. Shared with the
   // sibling-collision push so the push clears exactly what is drawn here.
-  const rectById = computeExpandBoundaryRects(contentNodes, expandedIds, workspace)
+  const rectById = computeExpandBoundaryRects(contentNodes, expandedIds, workspace, tableData)
 
   // An expanded element is "empty" (childless) when no content node descends
   // from it and no expanded descendant contributed a rect — its rect is the
