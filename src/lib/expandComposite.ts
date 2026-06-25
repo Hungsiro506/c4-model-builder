@@ -11,8 +11,16 @@
 
 import dagre from '@dagrejs/dagre'
 import type { Node } from '@xyflow/react'
-import type { ModelElement, Relationship } from '@/types/model'
-import { getChildElements, buildContentNode, type ContentNodeContext } from '@/components/canvas/canvasBuilders'
+import type { ModelElement, Relationship, TableDef } from '@/types/model'
+import {
+  getChildElements,
+  buildContentNode,
+  isDatabaseContainer,
+  tableNodeId,
+  getTableNodeSize,
+  buildTableNode,
+  type ContentNodeContext,
+} from '@/components/canvas/canvasBuilders'
 
 const DEFAULT_W = 200
 const DEFAULT_H = 100
@@ -32,6 +40,8 @@ export interface ExpandContext extends ContentNodeContext {
   direction: string
   /** Model relationships, used to wire dagre layout of an element's children. */
   relationships: Relationship[]
+  /** Database table definitions (sidecar-only), keyed by container ID. */
+  tableData: Record<string, TableDef[]>
 }
 
 interface Subtree {
@@ -52,11 +62,22 @@ function shiftNodes(nodes: Node[], dx: number, dy: number): Node[] {
  *  their full size participates in the parent's layout. */
 function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
   const children = getChildElements(element)
-  if (children.length === 0) {
+
+  // For Database containers, also include table definitions as children
+  const tables: TableDef[] = isDatabaseContainer(element)
+    ? (ctx.tableData[element.id] ?? [])
+    : []
+
+  if (children.length === 0 && tables.length === 0) {
     return { nodes: [], width: DEFAULT_W, height: DEFAULT_H }
   }
 
   const childIds = new Set(children.map((c) => c.id))
+  // Table children get synthetic IDs
+  const tableIds = new Map(tables.map((t) => [tableNodeId(element.id, t.id), t]))
+  for (const tid of tableIds.keys()) {
+    childIds.add(tid)
+  }
 
   // Compute each child's rendered footprint: its own subtree if expanded, else a leaf.
   const subtreeById = new Map<string, Subtree>()
@@ -66,6 +87,10 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
     }
   }
   const sizeOf = (id: string) => {
+    // Tables have dynamic size based on column count
+    const tableDef = tableIds.get(id)
+    if (tableDef) return getTableNodeSize(tableDef)
+
     const st = subtreeById.get(id)
     if (!st) return { width: DEFAULT_W, height: DEFAULT_H }
     // Expanded but childless: reserve the empty-expand footprint so the inner
@@ -81,6 +106,9 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
   for (const child of children) {
     g.setNode(child.id, sizeOf(child.id))
   }
+  for (const tid of tableIds.keys()) {
+    g.setNode(tid, sizeOf(tid))
+  }
   for (const rel of ctx.relationships) {
     if (childIds.has(rel.sourceId) && childIds.has(rel.destinationId)) {
       g.setEdge(rel.sourceId, rel.destinationId)
@@ -91,12 +119,13 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
   // dagre centers → top-left, collect bbox.
   const topLeft = new Map<string, { x: number; y: number }>()
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-  for (const child of children) {
-    const pos = g.node(child.id)
-    const { width, height } = sizeOf(child.id)
+  for (const id of childIds) {
+    const pos = g.node(id)
+    if (!pos) continue
+    const { width, height } = sizeOf(id)
     const x = pos.x - width / 2
     const y = pos.y - height / 2
-    topLeft.set(child.id, { x, y })
+    topLeft.set(id, { x, y })
     minX = Math.min(minX, x)
     minY = Math.min(minY, y)
     maxX = Math.max(maxX, x + width)
@@ -110,24 +139,29 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
   const boxHeight = (maxY - minY) + PAD_TOP + PAD_BOTTOM
 
   const nodes: Node[] = []
+  // Build model child nodes
   for (const child of children) {
-    const tl = topLeft.get(child.id)!
+    const tl = topLeft.get(child.id)
+    if (!tl) continue
     const x = tl.x + normDx
     const y = tl.y + normDy
     const subtree = subtreeById.get(child.id)
     if (subtree && subtree.nodes.length > 0) {
-      // Expanded child with content: place its whole subtree at (x, y).
       nodes.push(...shiftNodes(subtree.nodes, x, y))
     } else if (subtree) {
-      // Expanded but childless: emit a hidden own-node so it survives overlay
-      // rebuilds and buildExpandBoundaryNodes can draw an empty boundary (with
-      // an "add child" affordance) over its reserved footprint. Mirrors the
-      // top-level childless handling in expandComposite.
       const own = buildContentNode(child, { x, y }, ctx)
       nodes.push({ ...own, hidden: true })
     } else {
       nodes.push(buildContentNode(child, { x, y }, ctx))
     }
+  }
+  // Build table nodes
+  for (const [tid, tableDef] of tableIds) {
+    const tl = topLeft.get(tid)
+    if (!tl) continue
+    const x = tl.x + normDx
+    const y = tl.y + normDy
+    nodes.push(buildTableNode(tableDef, element.id, element, { x, y }, ctx))
   }
 
   return { nodes, width: boxWidth, height: boxHeight }
