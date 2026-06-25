@@ -3,8 +3,8 @@
 Context doc for AI-assisted development. Records what was built and **why**.
 Keep current as the feature changes.
 
-> Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
-> PR B1 + B2 pending.
+> Status: **PR A + B1 merged** (2026-06-25). Branches `feat/db-table-view-foundation` (PR #18), `feat/db-table-view-b1` (PR #20).
+> PR B2 pending.
 
 ## Problem
 
@@ -114,10 +114,11 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - `src/store/slices/lifecycle-slice.ts`: load/close `tableData`
 - `src/hooks/useAutoSave.ts`: persist `tableData`
 
-### PR B1 — System expand "+" → Container / Database dropdown
-- `src/components/canvas/nodes/BoundaryNode.tsx`: "+" button opens dropdown
+### PR B1 — System expand "+" → Container / Database dropdown ✅ (merged PR #20)
+- `src/components/canvas/nodes/BoundaryNode.tsx`: "+" button opens dropdown with Container/Database/Component for system boundaries, Component-only for container boundaries
 - `src/components/canvas/canvasBuilders.ts`: `isDatabaseContainer()` helper
 - Adds Database containers from expand mode without view switching
+- 10 new tests (5 canvasBuilders + 5 BoundaryNode)
 
 ### PR B2 — Database expand "+" → Table / Component dropdown + full UX
 - `src/components/canvas/nodes/TableNode.tsx`: renders table + columns
@@ -136,6 +137,11 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - No dropdown `useState` inside React Flow nodes (causes re-render loops)
 
 ## Progress log
+
+### 2026-06-25 — PR B1 merged (PR #20)
+- Expand "+" dropdown: SoftwareSystem boundaries now show Container | Database | Component.
+- `isDatabaseContainer()` helper in canvasBuilders.
+- 10 new tests. squash-merged as `feat: add Database container from expand dropdown`.
 
 ### 2026-06-25 — PR A merged (PR #18)
 - Foundation layer: types, Mermaid parser/generator, sidecar tables, table-slice store.
