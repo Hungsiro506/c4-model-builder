@@ -222,15 +222,15 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex border-b px-1" style={{ borderColor: 'var(--color-border)' }} role="tablist" aria-label="Element details">
+      {/* Tabs — scrollable when 4 tabs don't fit */}
+      <div className="flex border-b overflow-x-auto" style={{ borderColor: 'var(--color-border)' }} role="tablist" aria-label="Element details">
         {PANEL_TABS.concat(isDatabase ? [{ id: 'tables' as PanelTab, label: 'Tables' }] : []).map(({ id, label }) => (
           <button
             key={id}
             role="tab"
             aria-selected={activeTab === id}
             onClick={() => setActiveTab(id)}
-            className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150"
+            className="shrink-0 px-2.5 py-2.5 text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap transition-colors duration-150"
             style={{
               color: activeTab === id ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
               borderBottom: activeTab === id ? '2px solid var(--color-accent)' : '2px solid transparent',
