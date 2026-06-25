@@ -674,11 +674,12 @@ export function computeExpandBoundaryRects(
   contentNodes: Node[],
   expandedIds: Set<string>,
   workspace: Workspace,
+  tableData?: Record<string, TableDef[]>,
 ): Map<string, OverlayRect> {
   const rectById = new Map<string, OverlayRect>()
   if (expandedIds.size === 0) return rectById
 
-  const parentOf = buildParentMap(workspace)
+  const parentOf = buildParentMap(workspace, tableData)
   const depthOf = (id: string): number => {
     let d = 0
     let cur = parentOf.get(id)
@@ -738,10 +739,11 @@ export function buildExpandBoundaryNodes(
   contentNodes: Node[],
   expandedIds: Set<string>,
   workspace: Workspace,
+  tableData?: Record<string, TableDef[]>,
 ): Node[] {
   if (expandedIds.size === 0) return []
 
-  const parentOf = buildParentMap(workspace)
+  const parentOf = buildParentMap(workspace, tableData)
 
   // id → element metadata for label/type (the expanded element's own node is
   // gone — replaced by its children — so read names from the model).
@@ -773,7 +775,15 @@ export function buildExpandBoundaryNodes(
   // Rects deepest-first so an outer (e.g. system) boundary wraps the inner
   // (e.g. container) box — see computeExpandBoundaryRects. Shared with the
   // sibling-collision push so the push clears exactly what is drawn here.
-  const rectById = computeExpandBoundaryRects(contentNodes, expandedIds, workspace)
+  const rectById = computeExpandBoundaryRects(contentNodes, expandedIds, workspace, tableData)
+
+  // Detect Database containers so the boundary can adjust its "+" dropdown
+  const dbContainerIds = new Set<string>()
+  for (const sys of workspace.model.softwareSystems) {
+    for (const c of sys.containers) {
+      if (c.tags.includes('Database')) dbContainerIds.add(c.id)
+    }
+  }
 
   // An expanded element is "empty" (childless) when no content node descends
   // from it and no expanded descendant contributed a rect — its rect is the
@@ -803,7 +813,7 @@ export function buildExpandBoundaryNodes(
         position: { x, y },
         measured: { width: w, height: h },
         style: { width: w, height: h, pointerEvents: 'none' },
-        data: { name: info.name, typeLabel, empty: true, collapsible: true, elementId: expandedId },
+        data: { name: info.name, typeLabel, empty: true, collapsible: true, elementId: expandedId, isDatabase: dbContainerIds.has(expandedId) },
         zIndex: -5 + depthOf(expandedId),
         selectable: false,
         draggable: false,
@@ -822,7 +832,7 @@ export function buildExpandBoundaryNodes(
       // separate, higher-z React Flow nodes stacked on top, so they stay
       // interactive; `.nodrag` buttons in the header stay clickable.
       style: { width: w, height: h, pointerEvents: 'auto' },
-      data: { name: info.name, typeLabel, collapsible: true, elementId: expandedId },
+      data: { name: info.name, typeLabel, collapsible: true, elementId: expandedId, isDatabase: dbContainerIds.has(expandedId) },
       // Deeper boxes sit above their parent box but still behind content (>= 0).
       zIndex: -5 + depthOf(expandedId),
       selectable: false,
@@ -954,9 +964,10 @@ export function buildCompositeEdges(
   workspace: Workspace,
   nodes: Node[],
   filters: HighlightFilters,
+  tableData?: Record<string, TableDef[]>,
 ): Edge[] {
   const relationshipStyles = buildRelationshipStyleList(workspace)
-  const parentOf = buildParentMap(workspace)
+  const parentOf = buildParentMap(workspace, tableData)
 
   // Visible ids = content nodes (those carrying a model element). Expanded ids =
   // elements drawn as a wrapper boundary box (`__expand_boundary__<id>`).

@@ -103,7 +103,11 @@ function getBoundaryMemberIds(workspace: Workspace | null | undefined, view: Vie
 /** Visible descendant element ids of an expand-in-place parent (system →
  *  containers + their components; container → its components). Used to drag an
  *  expanded box as a unit. */
-function getExpandBoundaryMemberIds(workspace: Workspace | null | undefined, elementId: string): Set<string> {
+function getExpandBoundaryMemberIds(
+  workspace: Workspace | null | undefined,
+  elementId: string,
+  tableData?: Record<string, TableDef[]>,
+): Set<string> {
   const ids = new Set<string>()
   if (!workspace) return ids
   for (const sys of workspace.model.softwareSystems) {
@@ -117,6 +121,11 @@ function getExpandBoundaryMemberIds(workspace: Workspace | null | undefined, ele
     for (const c of sys.containers) {
       if (c.id === elementId) {
         for (const comp of c.components) ids.add(comp.id)
+        // Table children for Database containers
+        if (tableData && isDatabaseContainer(c)) {
+          const tables = tableData[elementId] ?? []
+          for (const t of tables) ids.add(tableNodeId(elementId, t.id))
+        }
         return ids
       }
     }
@@ -191,11 +200,12 @@ function pushSiblingsClearOfWrappers(
   draggedId?: string,
 ): Node[] {
   if (expandedIds.size === 0) return contentNodes
-  const realRects = computeExpandBoundaryRects(contentNodes, expandedIds, workspace)
+  const tData = useWorkspaceStore.getState().tableData
+  const realRects = computeExpandBoundaryRects(contentNodes, expandedIds, workspace, tData)
   if (realRects.size === 0) return contentNodes
 
   const axis = axisForDirection(direction)
-  const parentOf = buildParentMap(workspace)
+  const parentOf = buildParentMap(workspace, tData)
   const hasExpandedAncestor = (id: string): boolean => {
     let cur = parentOf.get(id)
     while (cur !== undefined) {
@@ -233,7 +243,7 @@ function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, 
   const boundaryClusters = view ? buildBoundaryLayoutClusters(workspace, view) : []
   const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters)
   const updatedBoundaries = view ? buildBoundaryNodes(workspace, view, contentOnly, updatedGroups) : []
-  const updatedExpandBoundaries = buildExpandBoundaryNodes(contentOnly, expandedIds, workspace)
+  const updatedExpandBoundaries = buildExpandBoundaryNodes(contentOnly, expandedIds, workspace, useWorkspaceStore.getState().tableData)
   const overlays = [...updatedBoundaries, ...updatedExpandBoundaries, ...updatedGroups].map((overlay) => {
     const previous = previousOverlays.get(overlay.id)
     return previous && sameOverlayGeometry(previous, overlay) ? previous : overlay
@@ -262,6 +272,7 @@ export default function Canvas() {
   const workspace = useWorkspaceStore((s) => s.workspace)
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const expandedElementIds = useWorkspaceStore((s) => s.expandedElementIds)
+  const tableData = useWorkspaceStore((s) => s.tableData)
   const selectElements = useWorkspaceStore((s) => s.selectElements)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
@@ -473,6 +484,7 @@ export default function Canvas() {
         drillableIds,
         onDrillIn: stableDrillInto,
         viewCountMap,
+        tableData,
       }
       // Sizing pass: how much each top-level expanded box grows vs 200×100.
       const { growth } = expandComposite(laidOut, expandCtx)
@@ -527,7 +539,7 @@ export default function Canvas() {
     // 4. Build group background nodes and scope boundary using post-layout positions
     const groupNodes = buildGroupNodes(workspace, workspace.model.groups, expandedNodes, boundaryClusters)
     const boundaryNodes = buildBoundaryNodes(workspace, view, expandedNodes, groupNodes)
-    const expandBoundaries = buildExpandBoundaryNodes(expandedNodes, new Set(expandedElementIds), workspace)
+    const expandBoundaries = buildExpandBoundaryNodes(expandedNodes, new Set(expandedElementIds), workspace, tableData)
     const overlayNodes = [...boundaryNodes, ...expandBoundaries, ...groupNodes]
     const allNodes = [...overlayNodes, ...expandedNodes]
 
@@ -535,11 +547,11 @@ export default function Canvas() {
     //    When anything is expanded, re-target relationships onto nearest visible
     //    ancestors (bundling fan-in to collapsed siblings).
     const edges = expandedElementIds.length > 0
-      ? buildCompositeEdges(workspace, allNodes, highlightFilters)
+      ? buildCompositeEdges(workspace, allNodes, highlightFilters, tableData)
       : buildEdges(workspace, view, allNodes, highlightFilters)
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableData])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.
@@ -896,7 +908,7 @@ export default function Canvas() {
       memberSet = new Set(group.elementIds)
     } else if (node.id.startsWith(EXPAND_BOUNDARY_PREFIX)) {
       const elementId = node.id.slice(EXPAND_BOUNDARY_PREFIX.length)
-      memberSet = getExpandBoundaryMemberIds(workspaceRef.current, elementId)
+      memberSet = getExpandBoundaryMemberIds(workspaceRef.current, elementId, useWorkspaceStore.getState().tableData)
       expandedChildren = true
     } else if (isScopeBoundaryNode(node)) {
       memberSet = getBoundaryMemberIds(workspaceRef.current, viewRef.current, node.id)
