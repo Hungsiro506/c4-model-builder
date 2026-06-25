@@ -230,7 +230,7 @@ function ElementProperties({ element, onClose }: { element: ModelElement; onClos
             role="tab"
             aria-selected={activeTab === id}
             onClick={() => setActiveTab(id)}
-            className="shrink-0 px-1.5 py-2.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap transition-colors duration-150"
+            className="flex-1 px-1.5 py-2.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap transition-colors duration-150"
             style={{
               color: activeTab === id ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
               borderBottom: activeTab === id ? '2px solid var(--color-accent)' : '2px solid transparent',
