@@ -4,7 +4,8 @@ Context doc for AI-assisted development. Records what was built and **why**.
 Keep current as the feature changes.
 
 > Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
-> PR B1 + B2 pending.
+> **PR B1 open** (PR #23). Branch `feat/db-table-view-b1`.
+> PR B2 pending.
 
 ## Problem
 
@@ -136,6 +137,13 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - No dropdown `useState` inside React Flow nodes (causes re-render loops)
 
 ## Progress log
+
+### 2026-06-25 — PR B1 open (PR #23)
+- System expand "+" → Container / Database dropdown.
+- `isDatabaseContainer()` helper in `canvasBuilders.ts`.
+- SoftwareSystem boundary: dropdown shows Container | Database | Component.
+- Container boundary: dropdown shows Component only.
+- 15 new tests. To be squash-merged as `feat: add Database container from expand dropdown`.
 
 ### 2026-06-25 — PR A merged (PR #18)
 - Foundation layer: types, Mermaid parser/generator, sidecar tables, table-slice store.

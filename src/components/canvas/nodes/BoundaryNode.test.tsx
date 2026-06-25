@@ -46,7 +46,7 @@ describe('BoundaryNode "+" dropdown', () => {
     expect(btn).toBeTruthy()
   })
 
-  it('opens dropdown with Container, Database, Component on "+" click for system', async () => {
+  it('opens dropdown with Container, Database on "+" click for system', async () => {
     renderBoundary({
       name: 'My System',
       typeLabel: 'Software System',
@@ -58,10 +58,23 @@ describe('BoundaryNode "+" dropdown', () => {
     const plusBtn = screen.getByRole('button', { name: /add container to my system/i })
     await userEvent.click(plusBtn)
 
-    // Dropdown items use "New X in Y" aria-labels
+    // System dropdown: Container and Database only (no Component — L3)
     expect(screen.getByRole('button', { name: /new container in my system/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /new database in my system/i })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /new component in my system/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /new component/i })).toBeFalsy()
+  })
+
+  it('does not show Component in dropdown for System boundary (Component is L3)', async () => {
+    renderBoundary({
+      name: 'My System',
+      typeLabel: 'Software System',
+      collapsible: true,
+      elementId: 'sys1',
+    })
+    const btn = screen.getByRole('button', { name: /add container to my system/i })
+    await userEvent.click(btn)
+    // System expands L1→L2: Containers only, not Components
+    expect(screen.queryByRole('button', { name: /new component/i })).toBeFalsy()
   })
 
   it('does not show Database in dropdown for Container boundary', async () => {

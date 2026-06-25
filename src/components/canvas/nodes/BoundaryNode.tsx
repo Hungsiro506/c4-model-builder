@@ -58,21 +58,9 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
 
   const doAddComponent = () => {
     if (!data.elementId) return
-    // Systems can also add components (which go into a container of the system).
-    // For Container boundaries, addComponent to that container directly.
-    if (isSystem) {
-      // Add a component to the system — but components need a container parent.
-      // For the system-boundary "+" dropdown, we skip direct component add
-      // unless there's a container to add it to. Using addContainer with no
-      // extra tag is the safe fallback for "Container" option; "Component"
-      // from system "+" means something different: add a component to the
-      // default container. But we don't have a default container concept.
-      // For now, "Component" from system "+" adds a container (same as
-      // "Container" option) — the user can later nest components inside it.
-      addContainer(data.elementId, 'New Component', undefined, undefined, { skipActiveView: true })
-    } else {
-      addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
-    }
+    // Only Container boundaries offer Component add (L2→L3 expand).
+    // System boundaries (L1→L2) don't — Components live inside Containers.
+    addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
     setDropdownOpen(false)
   }
 
@@ -163,14 +151,6 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
                       aria-label={`New Database in ${data.name}`}
                     >
                       Database
-                    </button>
-                    <button
-                      className="row-menu-item nodrag"
-                      style={{ width: '100%', textAlign: 'left', padding: '6px 12px', fontSize: 'var(--text-xs)', background: 'none', border: 'none', color: 'var(--color-text-primary)', cursor: 'pointer' }}
-                      onClick={(e) => { e.stopPropagation(); doAddComponent() }}
-                      aria-label={`New Component in ${data.name}`}
-                    >
-                      Component
                     </button>
                   </>
                 ) : (
