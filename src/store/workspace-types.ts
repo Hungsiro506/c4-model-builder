@@ -260,6 +260,8 @@ export interface WorkspaceState extends UndoState {
   tableData: Record<string, TableDef[]>
   /** Mermaid ERD text keyed by container ID. In-memory only, synced via re-apply. */
   mermaidText: Record<string, string>
+  /** Currently selected table for right-panel editing (canvas-driven). */
+  selectedTable: { containerId: string; tableId: string } | null
 
   // Table CRUD
   addTable: (containerId: string, name: string) => TableDef
@@ -271,4 +273,6 @@ export interface WorkspaceState extends UndoState {
   moveColumn: (containerId: string, tableId: string, columnId: string, toIndex: number) => void
   setTablesForContainer: (containerId: string, tables: TableDef[]) => void
   setMermaidText: (containerId: string, text: string) => void
+  selectTable: (containerId: string, tableId: string) => void
+  clearTableSelection: () => void
 }

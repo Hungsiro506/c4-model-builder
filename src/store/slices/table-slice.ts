@@ -4,10 +4,11 @@ import type { TableDef, ColumnDef } from '@/types/model'
 import { nanoid } from '../internals'
 
 export type TableSlice = Pick<WorkspaceState,
-  | 'tableData' | 'mermaidText'
+  | 'tableData' | 'mermaidText' | 'selectedTable'
   | 'addTable' | 'updateTable' | 'deleteTable'
   | 'addColumn' | 'updateColumn' | 'deleteColumn'
   | 'moveColumn' | 'setTablesForContainer' | 'setMermaidText'
+  | 'selectTable' | 'clearTableSelection'
 >
 
 export const createTableSlice: StateCreator<
@@ -18,6 +19,7 @@ export const createTableSlice: StateCreator<
 > = (set) => ({
   tableData: {},
   mermaidText: {},
+  selectedTable: null,
 
   // ─── Table CRUD ──────────────────────────────────────────────────
 
@@ -125,6 +127,20 @@ export const createTableSlice: StateCreator<
   setMermaidText: (containerId, text) => {
     set((s) => {
       s.mermaidText[containerId] = text
+    })
+  },
+
+  // ─── Table selection (canvas-driven) ─────────────────────────────
+
+  selectTable: (containerId, tableId) => {
+    set((s) => {
+      s.selectedTable = { containerId, tableId }
+    })
+  },
+
+  clearTableSelection: () => {
+    set((s) => {
+      s.selectedTable = null
     })
   },
 })
