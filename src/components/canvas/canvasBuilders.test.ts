@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildNodes } from './canvasBuilders'
+import { buildNodes, isDatabaseContainer } from './canvasBuilders'
 import type { HighlightFilters } from '@/lib/highlight'
 import { THEMES } from '@/lib/themes'
-import type { ElementStyle, Workspace } from '@/types/model'
+import type { ElementStyle, Workspace, Container, SoftwareSystem, Person, Component } from '@/types/model'
 
 const NO_FILTERS: HighlightFilters = {
   tags: [],
@@ -92,5 +92,34 @@ describe('buildNodes theme styles', () => {
     const style = renderedStyle([vipStyle], THEMES.structurizr, ['Element', 'Person', 'VIP'])
     expect(style.background).toBe('#441155')
     expect(style.stroke).toBe('#dd77ff')
+  })
+})
+
+describe('isDatabaseContainer', () => {
+  const base = { id: 'c1', name: 'Test', properties: {} }
+
+  it('returns true for a Container with "Database" tag', () => {
+    const db: Container = { ...base, type: 'container', tags: ['Element', 'Container', 'Database'], components: [] }
+    expect(isDatabaseContainer(db)).toBe(true)
+  })
+
+  it('returns false for a Container without "Database" tag', () => {
+    const svc: Container = { ...base, type: 'container', tags: ['Element', 'Container'], components: [] }
+    expect(isDatabaseContainer(svc)).toBe(false)
+  })
+
+  it('returns false for a SoftwareSystem', () => {
+    const sys: SoftwareSystem = { ...base, type: 'softwareSystem', tags: ['Element', 'Software System'], containers: [] }
+    expect(isDatabaseContainer(sys)).toBe(false)
+  })
+
+  it('returns false for a Person', () => {
+    const p: Person = { ...base, type: 'person', tags: ['Element', 'Person'] }
+    expect(isDatabaseContainer(p)).toBe(false)
+  })
+
+  it('returns false for a Component', () => {
+    const comp: Component = { ...base, type: 'component', tags: ['Element', 'Component'] }
+    expect(isDatabaseContainer(comp)).toBe(false)
   })
 })
