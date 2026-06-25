@@ -118,6 +118,7 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 ### PR B1 — System expand "+" → Container / Database dropdown
 - `src/components/canvas/nodes/BoundaryNode.tsx`: "+" button opens dropdown
 - `src/components/canvas/canvasBuilders.ts`: `isDatabaseContainer()` helper
+- System "+" shows Container | Database (L1→L2); Container "+" shows Component (L2→L3)
 - Adds Database containers from expand mode without view switching
 
 ### PR B2 — Database expand "+" → Table / Component dropdown + full UX
@@ -141,9 +142,10 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 ### 2026-06-25 — PR B1 open (PR #23)
 - System expand "+" → Container / Database dropdown.
 - `isDatabaseContainer()` helper in `canvasBuilders.ts`.
-- SoftwareSystem boundary: dropdown shows Container | Database | Component.
-- Container boundary: dropdown shows Component only.
-- 15 new tests. To be squash-merged as `feat: add Database container from expand dropdown`.
+- SoftwareSystem boundary (L1→L2): dropdown shows Container | Database.
+- Container boundary (L2→L3): dropdown shows Component only.
+- Component excluded from System "+" — Components are L3, belong inside Containers.
+- 11 new tests. To be squash-merged as `feat: add Database container from expand dropdown`.
 
 ### 2026-06-25 — PR A merged (PR #18)
 - Foundation layer: types, Mermaid parser/generator, sidecar tables, table-slice store.
