@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildNodes, isDatabaseContainer } from './canvasBuilders'
+import { buildNodes, isDatabaseContainer, tableNodeId, getTableNodeSize, buildTableNode, buildParentMap } from './canvasBuilders'
 import type { HighlightFilters } from '@/lib/highlight'
 import { THEMES } from '@/lib/themes'
-import type { ElementStyle, Workspace, Container, SoftwareSystem, Person, Component } from '@/types/model'
+import type { ElementStyle, Workspace, Container, SoftwareSystem, Person, Component, TableDef, ModelElement } from '@/types/model'
 
 const NO_FILTERS: HighlightFilters = {
   tags: [],
@@ -121,5 +121,115 @@ describe('isDatabaseContainer', () => {
   it('returns false for a Component', () => {
     const comp: Component = { ...base, type: 'component', tags: ['Element', 'Component'] }
     expect(isDatabaseContainer(comp)).toBe(false)
+  })
+})
+
+describe('tableNodeId', () => {
+  it('returns synthetic id combining container and table id', () => {
+    expect(tableNodeId('db-1', 't-users')).toBe('__table__db-1__t-users')
+  })
+})
+
+describe('getTableNodeSize', () => {
+  const HEADER_H = 36
+  const ROW_H = 20
+
+  it('returns minimal size for table with no columns', () => {
+    const empty: TableDef = { id: 't1', name: 'empty', columns: [] }
+    const size = getTableNodeSize(empty)
+    expect(size.width).toBe(220)
+    expect(size.height).toBe(HEADER_H + ROW_H + 8) // minimum 1 row placeholder
+  })
+
+  it('scales height with column count', () => {
+    const manyCols: TableDef = {
+      id: 't1', name: 'big',
+      columns: [
+        { name: 'id', type: 'int', isPrimaryKey: true },
+        { name: 'name', type: 'varchar' },
+        { name: 'email', type: 'varchar' },
+      ],
+    }
+    const size = getTableNodeSize(manyCols)
+    expect(size.width).toBe(220)
+    expect(size.height).toBe(HEADER_H + 3 * ROW_H + 8)
+  })
+})
+
+describe('buildTableNode', () => {
+  const ctx = { styleIndex: new Map(), active: false }
+
+  it('returns a React Flow node of type "table"', () => {
+    const td: TableDef = { id: 't1', name: 'Users', columns: [] }
+    const container: ModelElement = {
+      id: 'c1', type: 'container', name: 'DB', tags: ['Element', 'Container', 'Database'],
+      properties: {}, components: [],
+    }
+    const node = buildTableNode(td, 'c1', container, { x: 10, y: 20 }, ctx)
+    expect(node.type).toBe('table')
+    expect(node.id).toBe('__table__c1__t1')
+    expect(node.position).toEqual({ x: 10, y: 20 })
+    expect(node.data.tableDef).toBe(td)
+    expect(node.data.containerId).toBe('c1')
+    expect(node.data.style).toBeUndefined() // no style in empty index
+  })
+})
+
+describe('buildParentMap with tableData', () => {
+  it('includes table → container mapping for Database containers', () => {
+    const ws: Workspace = {
+      name: 'test',
+      model: {
+        people: [],
+        softwareSystems: [{
+          id: 'sys1', type: 'softwareSystem', name: 'System', tags: [], properties: {},
+          containers: [{
+            id: 'db1', type: 'container', name: 'DB', tags: ['Element', 'Container', 'Database'],
+            properties: {}, components: [{ id: 'comp1', type: 'component', name: 'C', tags: [], properties: {} }],
+          }],
+        }],
+        relationships: [],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [], systemContextViews: [], containerViews: [], componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    const tableData = { 'db1': [{ id: 't1', name: 'Users', columns: [] }] }
+    const map = buildParentMap(ws, tableData)
+
+    // Existing model parent
+    expect(map.get('comp1')).toBe('db1')
+    // Table parent
+    expect(map.get('__table__db1__t1')).toBe('db1')
+    // System has no parent
+    expect(map.get('sys1')).toBeUndefined()
+  })
+
+  it('does not crash when tableData is undefined', () => {
+    const ws: Workspace = {
+      name: 'test',
+      model: {
+        people: [],
+        softwareSystems: [{
+          id: 'sys1', type: 'softwareSystem', name: 'System', tags: [], properties: {},
+          containers: [{
+            id: 'svc1', type: 'container', name: 'API', tags: ['Element', 'Container'],
+            properties: {}, components: [],
+          }],
+        }],
+        relationships: [],
+        groups: [],
+      },
+      views: {
+        systemLandscapeViews: [], systemContextViews: [], containerViews: [], componentViews: [],
+        configuration: { styles: { elements: [], relationships: [] } },
+      },
+    }
+    const map = buildParentMap(ws, undefined)
+    // Non-DB containers still map to their system, no component children
+    expect(map.get('svc1')).toBe('sys1')
+    expect(map.size).toBe(1) // container→system, no components
   })
 })

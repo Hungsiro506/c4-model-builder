@@ -7,7 +7,8 @@ import {
   groupSpansBoundaryClusters,
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
-import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship } from '@/types/model'
+import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship, TableDef } from '@/types/model'
+import type { TableNodeData } from './nodes/TableNode'
 import { EMPTY_EXPAND_W, EMPTY_EXPAND_H } from '@/lib/expandComposite'
 import { CHANGESTATE_ELEMENT_STYLES, CHANGESTATE_RELATIONSHIP_STYLES } from '@/lib/changeState'
 
@@ -869,15 +870,66 @@ export function isDatabaseContainer(element: ModelElement): boolean {
   return element.type === 'container' && element.tags.includes('Database')
 }
 
+// ─── Database table helpers ──────────────────────────────────────────
+
+/** Synthetic React Flow node ID for a table inside an expanded container. */
+export function tableNodeId(containerId: string, tableId: string): string {
+  return `__table__${containerId}__${tableId}`
+}
+
+/** Compute the rendered size of a table node based on its column count. */
+export function getTableNodeSize(tableDef: TableDef): { width: number; height: number } {
+  const HEADER_H = 36
+  const ROW_H = 20
+  return {
+    width: 220,
+    height: HEADER_H + (tableDef.columns.length || 1) * ROW_H + 8,
+  }
+}
+
+/** Build a React Flow node for a table definition inside an expanded Database container. */
+export function buildTableNode(
+  tableDef: TableDef,
+  containerId: string,
+  parentContainer: ModelElement,
+  position: { x: number; y: number },
+  ctx: ContentNodeContext,
+): Node {
+  const style = getElementStyle(parentContainer, ctx.styleIndex)
+  return {
+    id: tableNodeId(containerId, tableDef.id),
+    type: 'table',
+    position,
+    data: {
+      tableDef,
+      containerId,
+      style,
+    } satisfies TableNodeData,
+  }
+}
+
 /** Build a child→parent id map for the whole model (container→system,
- *  component→container). People and systems have no parent. */
-export function buildParentMap(workspace: Workspace): Map<string, string> {
+ *  component→container). People and systems have no parent.
+ *  When tableData is provided, also maps synthetic table ids → DB container. */
+export function buildParentMap(
+  workspace: Workspace,
+  tableData?: Record<string, TableDef[]>,
+): Map<string, string> {
   const parentOf = new Map<string, string>()
   for (const sys of workspace.model.softwareSystems) {
     for (const container of sys.containers) {
       parentOf.set(container.id, sys.id)
       for (const component of container.components) {
         parentOf.set(component.id, container.id)
+      }
+      // Table nodes are synthetic children of DB containers
+      if (tableData && isDatabaseContainer(container)) {
+        const tables = tableData[container.id]
+        if (tables) {
+          for (const t of tables) {
+            parentOf.set(tableNodeId(container.id, t.id), container.id)
+          }
+        }
       }
     }
   }
