@@ -59,7 +59,10 @@ test.describe('Expand-in-place add-at-parent', () => {
     const aId = (await workspace.getElementByName('A'))!.id
     await expandNode(workspace.page, aId)
 
+    // Open the "+" dropdown
     await workspace.page.getByRole('button', { name: 'Add container to A' }).click()
+    // Select "Container" from the dropdown
+    await workspace.page.getByRole('button', { name: 'New Container in A' }).click()
     await workspace.page.waitForTimeout(300)
 
     const newContainer = await workspace.getElementByName('New Container')
@@ -79,7 +82,9 @@ test.describe('Expand-in-place add-at-parent', () => {
   test('nested: expand container then add a component inside it', async ({ workspace }) => {
     const aId = (await workspace.getElementByName('A'))!.id
     await expandNode(workspace.page, aId)
+    // Open "+" dropdown and select Container
     await workspace.page.getByRole('button', { name: 'Add container to A' }).click()
+    await workspace.page.getByRole('button', { name: 'New Container in A' }).click()
     await workspace.page.waitForTimeout(300)
 
     const container = (await workspace.getElementByName('New Container'))!
@@ -95,6 +100,7 @@ test.describe('Expand-in-place add-at-parent', () => {
 
     await expect(workspace.page.getByRole('button', { name: 'Add component to New Container' })).toBeVisible()
     await workspace.page.getByRole('button', { name: 'Add component to New Container' }).click()
+    await workspace.page.getByRole('button', { name: 'New Component in New Container' }).click()
     await workspace.page.waitForTimeout(300)
 
     const component = await workspace.getElementByName('New Component')
@@ -115,6 +121,7 @@ test.describe('Expand-in-place add-at-parent', () => {
     const aId = (await workspace.getElementByName('A'))!.id
     await expandNode(workspace.page, aId)
     await workspace.page.getByRole('button', { name: 'Add container to A' }).click()
+    await workspace.page.getByRole('button', { name: 'New Container in A' }).click()
     await workspace.page.waitForTimeout(300)
 
     const newContainer = (await workspace.getElementByName('New Container'))!
