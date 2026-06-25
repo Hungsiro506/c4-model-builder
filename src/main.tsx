@@ -49,8 +49,8 @@ if (import.meta.env.DEV) {
   }
   ;(window as unknown as Record<string, unknown>).__testParseAndLoad = async (dsl: string) => {
     const { parseWorkspaceDocument } = await import('./lib/workspaceDocument')
-    const { workspace } = parseWorkspaceDocument({ content: dsl, fallbackName: 'test' })
-    useWorkspaceStore.getState().loadWorkspace(workspace)
+    const { workspace, tableData } = parseWorkspaceDocument({ content: dsl, fallbackName: 'test' })
+    useWorkspaceStore.getState().loadWorkspace(workspace, tableData)
   }
   ;(window as unknown as Record<string, unknown>).__testLoadTemplate = (name: string) => {
     const load = useWorkspaceStore.getState().loadWorkspace

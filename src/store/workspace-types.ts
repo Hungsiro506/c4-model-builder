@@ -1,6 +1,6 @@
 import type {
   Workspace, ModelElement, Relationship, Group,
-  ViewType, ElementStatus,
+  ViewType, ElementStatus, TableDef, ColumnDef,
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
 export interface CascadeImpact {
@@ -108,7 +108,7 @@ export interface WorkspaceState extends UndoState {
   revalidateScope: () => void
 
   // Workspace lifecycle
-  loadWorkspace: (workspace: Workspace) => void
+  loadWorkspace: (workspace: Workspace, tableData?: Record<string, TableDef[]>) => void
   closeWorkspace: () => void
   updateWorkspaceMeta: (patch: { name?: string; description?: string }) => void
 
@@ -254,4 +254,21 @@ export interface WorkspaceState extends UndoState {
   createViewDialogOpen: boolean
   setCreateViewDialogOpen: (open: boolean) => void
   setPresentationMode: (on: boolean) => void
+
+  // Database table view (sidecar-only, never serialized to DSL)
+  /** Table definitions keyed by container ID. Sidecar-persisted. */
+  tableData: Record<string, TableDef[]>
+  /** Mermaid ERD text keyed by container ID. In-memory only, synced via re-apply. */
+  mermaidText: Record<string, string>
+
+  // Table CRUD
+  addTable: (containerId: string, name: string) => TableDef
+  updateTable: (containerId: string, tableId: string, patch: Partial<Pick<TableDef, 'name' | 'description'>>) => void
+  deleteTable: (containerId: string, tableId: string) => void
+  addColumn: (containerId: string, tableId: string, name: string, type: string) => ColumnDef & { id: string }
+  updateColumn: (containerId: string, tableId: string, columnId: string, patch: Partial<Pick<ColumnDef, 'name' | 'type' | 'isPrimaryKey' | 'isForeignKey' | 'description'>>) => void
+  deleteColumn: (containerId: string, tableId: string, columnId: string) => void
+  moveColumn: (containerId: string, tableId: string, columnId: string, toIndex: number) => void
+  setTablesForContainer: (containerId: string, tables: TableDef[]) => void
+  setMermaidText: (containerId: string, text: string) => void
 }

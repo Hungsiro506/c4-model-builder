@@ -4377,3 +4377,150 @@ describe('removeElementsFromView', () => {
     expect(useWorkspaceStore.getState().workspace!.views.containerViews[0].elements).toEqual([{ id: 'c1' }])
   })
 })
+
+// ─── Table slice CRUD ──────────────────────────────────────────────────
+
+describe('table slice', () => {
+  beforeEach(() => {
+    useWorkspaceStore.getState().loadWorkspace(makeWorkspace())
+  })
+
+  describe('addTable', () => {
+    it('adds a table to tableData for a container', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'users')
+      const state = useWorkspaceStore.getState()
+      expect(state.tableData['db-1']).toHaveLength(1)
+      expect(state.tableData['db-1'][0].name).toBe('users')
+      expect(state.tableData['db-1'][0].id).toBe(table.id)
+      expect(state.tableData['db-1'][0].columns).toEqual([])
+    })
+
+    it('returns the created table with generated ID', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'orders')
+      expect(table.id).toBeTruthy()
+      expect(table.name).toBe('orders')
+    })
+
+    it('creates container entry if it does not exist yet', () => {
+      useWorkspaceStore.getState().addTable('new-container', 'posts')
+      expect(useWorkspaceStore.getState().tableData['new-container']).toBeDefined()
+    })
+  })
+
+  describe('updateTable', () => {
+    it('updates table name and description', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'users')
+      useWorkspaceStore.getState().updateTable('db-1', table.id, { name: 'accounts', description: 'All accounts' })
+      const t = useWorkspaceStore.getState().tableData['db-1'][0]
+      expect(t.name).toBe('accounts')
+      expect(t.description).toBe('All accounts')
+    })
+
+    it('is a no-op when container does not exist', () => {
+      useWorkspaceStore.getState().updateTable('no-db', 't1', { name: 'x' })
+      expect(useWorkspaceStore.getState().tableData['no-db']).toBeUndefined()
+    })
+
+    it('is a no-op when table does not exist in that container', () => {
+      useWorkspaceStore.getState().addTable('db-1', 'users')
+      useWorkspaceStore.getState().updateTable('db-1', 'nonexistent', { name: 'x' })
+      expect(useWorkspaceStore.getState().tableData['db-1'][0].name).toBe('users')
+    })
+  })
+
+  describe('deleteTable', () => {
+    it('removes a table from tableData', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'users')
+      useWorkspaceStore.getState().deleteTable('db-1', table.id)
+      expect(useWorkspaceStore.getState().tableData['db-1']).toHaveLength(0)
+    })
+
+    it('is a no-op when table does not exist', () => {
+      useWorkspaceStore.getState().addTable('db-1', 'users')
+      useWorkspaceStore.getState().deleteTable('db-1', 'nonexistent')
+      expect(useWorkspaceStore.getState().tableData['db-1']).toHaveLength(1)
+    })
+  })
+
+  describe('addColumn', () => {
+    it('adds a column to a table', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'users')
+      const col = useWorkspaceStore.getState().addColumn('db-1', table.id, 'name', 'string')
+      expect(col.name).toBe('name')
+      expect(col.type).toBe('string')
+      const t = useWorkspaceStore.getState().tableData['db-1'][0]
+      expect(t.columns).toHaveLength(1)
+    })
+
+    it('generates a unique ID for each column', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'users')
+      const col1 = useWorkspaceStore.getState().addColumn('db-1', table.id, 'id', 'int')
+      const col2 = useWorkspaceStore.getState().addColumn('db-1', table.id, 'name', 'string')
+      expect(col1.id).toBeTruthy()
+      expect(col2.id).toBeTruthy()
+      expect(col1.id).not.toBe(col2.id)
+    })
+  })
+
+  describe('updateColumn', () => {
+    it('updates column properties', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'users')
+      const col = useWorkspaceStore.getState().addColumn('db-1', table.id, 'name', 'string')
+      useWorkspaceStore.getState().updateColumn('db-1', table.id, col.id, { type: 'varchar(255)', isPrimaryKey: true })
+      const t = useWorkspaceStore.getState().tableData['db-1'][0]
+      expect(t.columns[0].type).toBe('varchar(255)')
+      expect(t.columns[0].isPrimaryKey).toBe(true)
+    })
+  })
+
+  describe('deleteColumn', () => {
+    it('removes a column from a table', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'users')
+      const col = useWorkspaceStore.getState().addColumn('db-1', table.id, 'name', 'string')
+      useWorkspaceStore.getState().deleteColumn('db-1', table.id, col.id)
+      expect(useWorkspaceStore.getState().tableData['db-1'][0].columns).toHaveLength(0)
+    })
+  })
+
+  describe('moveColumn', () => {
+    it('reorders columns within a table', () => {
+      const table = useWorkspaceStore.getState().addTable('db-1', 'users')
+      const col1 = useWorkspaceStore.getState().addColumn('db-1', table.id, 'id', 'int')
+      useWorkspaceStore.getState().addColumn('db-1', table.id, 'name', 'string')
+      useWorkspaceStore.getState().addColumn('db-1', table.id, 'email', 'string')
+
+      // Move 'id' (index 0) → index 2
+      useWorkspaceStore.getState().moveColumn('db-1', table.id, col1.id, 2)
+
+      const cols = useWorkspaceStore.getState().tableData['db-1'][0].columns
+      expect(cols[0].name).toBe('name')
+      expect(cols[1].name).toBe('email')
+      expect(cols[2].name).toBe('id')
+    })
+  })
+
+  describe('setTablesForContainer', () => {
+    it('replaces all tables for a container', () => {
+      useWorkspaceStore.getState().addTable('db-1', 'old_table')
+      useWorkspaceStore.getState().setTablesForContainer('db-1', [
+        { id: 't1', name: 'new_table', columns: [] },
+        { id: 't2', name: 'other_table', columns: [] },
+      ])
+      expect(useWorkspaceStore.getState().tableData['db-1']).toHaveLength(2)
+      expect(useWorkspaceStore.getState().tableData['db-1'][0].name).toBe('new_table')
+    })
+  })
+
+  describe('setMermaidText', () => {
+    it('stores mermaid text for a container', () => {
+      useWorkspaceStore.getState().setMermaidText('db-1', 'erDiagram\n  USERS {\n    int id PK\n  }')
+      expect(useWorkspaceStore.getState().mermaidText['db-1']).toContain('erDiagram')
+    })
+
+    it('clears mermaid text when set to empty string', () => {
+      useWorkspaceStore.getState().setMermaidText('db-1', 'some text')
+      useWorkspaceStore.getState().setMermaidText('db-1', '')
+      expect(useWorkspaceStore.getState().mermaidText['db-1']).toBe('')
+    })
+  })
+})
