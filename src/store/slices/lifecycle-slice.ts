@@ -30,7 +30,7 @@ export const createLifecycleSlice: StateCreator<
     s.scopeViolations = s.workspace ? validateScope(s.workspace) : []
   }),
 
-  loadWorkspace: (workspace) => {
+  loadWorkspace: (workspace, tableData) => {
     const firstView = getFirstViewKey(workspace)
     set({
       workspace,
@@ -53,6 +53,9 @@ export const createLifecycleSlice: StateCreator<
       activeTeamFilter: [],
       lastClearedHighlightFilters: null,
       scopeViolations: validateScope(workspace),
+      // Reset table data
+      tableData: tableData ?? {},
+      mermaidText: {},
     })
   },
 
@@ -73,6 +76,8 @@ export const createLifecycleSlice: StateCreator<
       redoStack: [],
       lastClearedHighlightFilters: null,
       scopeViolations: [],
+      tableData: {},
+      mermaidText: {},
     }),
 
   updateWorkspaceMeta: (patch) => set((s) => {

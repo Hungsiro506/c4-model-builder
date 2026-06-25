@@ -41,6 +41,25 @@ export interface Component extends BaseElement {
   technology?: string
 }
 
+// ─── Database Tables (sidecar-only, never serialized to DSL) ──────────
+
+export interface ColumnDef {
+  name: string
+  type: string
+  isPrimaryKey?: boolean
+  isForeignKey?: boolean
+  description?: string
+}
+
+export interface TableDef {
+  id: string
+  name: string
+  columns: ColumnDef[]
+  description?: string
+}
+
+// ─── Groups ────────────────────────────────────────────────────────────
+
 export interface Group {
   id: string
   name: string

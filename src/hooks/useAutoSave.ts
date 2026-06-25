@@ -17,6 +17,7 @@ const cancelIdle = typeof cancelIdleCallback === 'function'
  *  Also writes to the current .dsl file handle and .c4hero.json sidecar if open. */
 export function useAutoSave() {
   const workspace = useWorkspaceStore((s) => s.workspace)
+  const tableData = useWorkspaceStore((s) => s.tableData)
   const timer = useRef<ReturnType<typeof setTimeout>>(null)
   const idleHandle = useRef<number>(0)
 
@@ -52,7 +53,7 @@ export function useAutoSave() {
 
         if (hasSingleFile || (dirHandle && filename)) {
           const dsl = serializeDSL(state.workspace)
-          const sidecar = extractSidecar(state.workspace)
+          const sidecar = extractSidecar(state.workspace, state.tableData)
 
           if (hasSingleFile) {
             writeToCurrentHandle(dsl)
@@ -73,5 +74,5 @@ export function useAutoSave() {
       if (timer.current) clearTimeout(timer.current)
       cancelIdle(idleHandle.current)
     }
-  }, [workspace])
+  }, [workspace, tableData])
 }

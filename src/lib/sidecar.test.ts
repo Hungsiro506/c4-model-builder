@@ -342,3 +342,199 @@ describe('sidecarName', () => {
     expect(sidecarName('line\nbreak.dsl')).toBe('line_break.c4hero.json')
   })
 })
+
+// ─── Tables in sidecar ─────────────────────────────────────────────────
+
+describe('tables in extractSidecar / applySidecar', () => {
+  it('extractSidecar includes tables when tableData is provided', () => {
+    const ws = makeWorkspace()
+    const tableData = {
+      'db-container-1': [
+        { id: 't1', name: 'users', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
+      ],
+    }
+    const result = extractSidecar(ws, tableData)
+    expect(result).not.toBeNull()
+    expect(result!.tables).toBeDefined()
+    expect(result!.tables!['db-container-1']).toHaveLength(1)
+    expect(result!.tables!['db-container-1'][0].name).toBe('users')
+  })
+
+  it('extractSidecar does NOT include tables when tableData is empty', () => {
+    const ws = makeWorkspace()
+    const result = extractSidecar(ws, {})
+    // Empty tableData should not flag hasData
+    expect(result).toBeNull()
+  })
+
+  it('extractSidecar does NOT include tables when tableData is undefined', () => {
+    const ws = makeWorkspace()
+    const result = extractSidecar(ws, undefined)
+    expect(result).toBeNull()
+  })
+
+  it('extractSidecar includes tables alongside other sidecar data', () => {
+    const ws = makeWorkspace()
+    ws.views.systemLandscapeViews[0].elements[0].pinned = true
+    const tableData = {
+      'db-1': [
+        { id: 't1', name: 'orders', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
+      ],
+    }
+    const result = extractSidecar(ws, tableData)
+    expect(result!.views).toBeDefined()
+    expect(result!.tables).toBeDefined()
+  })
+
+  it('extractSidecar serializes column FK and description', () => {
+    const ws = makeWorkspace()
+    const tableData = {
+      'db-1': [
+        {
+          id: 't1',
+          name: 'orders',
+          columns: [
+            { name: 'id', type: 'int', isPrimaryKey: true },
+            { name: 'customer_id', type: 'int', isForeignKey: true },
+            { name: 'notes', type: 'text', description: 'order notes' },
+          ],
+        },
+      ],
+    }
+    const result = extractSidecar(ws, tableData)
+    const cols = result!.tables!['db-1'][0].columns
+    expect(cols[0]).toEqual({ name: 'id', type: 'int', isPrimaryKey: true })
+    expect(cols[1]).toEqual({ name: 'customer_id', type: 'int', isForeignKey: true })
+    expect(cols[2]).toEqual({ name: 'notes', type: 'text', description: 'order notes' })
+  })
+
+  it('extractSidecar serializes table description', () => {
+    const ws = makeWorkspace()
+    const tableData = {
+      'db-1': [
+        { id: 't1', name: 'users', description: 'All users', columns: [] },
+      ],
+    }
+    const result = extractSidecar(ws, tableData)
+    expect(result!.tables!['db-1'][0].description).toBe('All users')
+  })
+
+  it('applySidecar returns tables from valid sidecar', () => {
+    const ws = makeWorkspace()
+    const sidecar = {
+      version: 1 as const,
+      tables: {
+        'db-1': [
+          { id: 't1', name: 'users', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
+        ],
+      },
+    }
+    const tables = applySidecar(ws, sidecar)
+    expect(tables).not.toBeNull()
+    expect(tables!['db-1']).toHaveLength(1)
+    expect(tables!['db-1'][0].name).toBe('users')
+  })
+
+  it('applySidecar returns null when sidecar has no tables', () => {
+    const ws = makeWorkspace()
+    const tables = applySidecar(ws, { version: 1 })
+    expect(tables).toBeNull()
+  })
+
+  it('tables round-trip through extractSidecar → serialize → parse → applySidecar', () => {
+    const ws = makeWorkspace()
+    const tableData = {
+      'db-1': [
+        {
+          id: 't1',
+          name: 'users',
+          columns: [
+            { name: 'id', type: 'int', isPrimaryKey: true },
+            { name: 'name', type: 'string' },
+            { name: 'email', type: 'string', description: 'user email' },
+          ],
+        },
+      ],
+    }
+
+    const sidecar = extractSidecar(ws, tableData)!
+    const json = serializeSidecar(sidecar)
+    const parsed = parseSidecar(json)!
+    const tables = applySidecar(ws, parsed)!
+
+    expect(tables['db-1']).toHaveLength(1)
+    expect(tables['db-1'][0].name).toBe('users')
+    expect(tables['db-1'][0].columns).toHaveLength(3)
+    expect(tables['db-1'][0].columns[0]).toMatchObject({ name: 'id', type: 'int', isPrimaryKey: true })
+  })
+
+  it('parseSidecar returns null for invalid tables shape', () => {
+    // tables should be Record<string, SidecarTable[]>, not a single array
+    expect(parseSidecar(JSON.stringify({
+      version: 1,
+      tables: [
+        { id: 't1', name: 'users', columns: [] },
+      ],
+    }))).toBeNull()
+  })
+
+  it('parseSidecar returns null for table with missing required fields', () => {
+    // TableDef requires id, name, columns
+    expect(parseSidecar(JSON.stringify({
+      version: 1,
+      tables: {
+        'db-1': [{ name: 'users', columns: [] }], // missing id
+      },
+    }))).toBeNull()
+  })
+
+  it('parseSidecar returns null for column with missing required fields', () => {
+    // ColumnDef requires name, type
+    expect(parseSidecar(JSON.stringify({
+      version: 1,
+      tables: {
+        'db-1': [{ id: 't1', name: 'users', columns: [{ type: 'int' }] }], // missing name
+      },
+    }))).toBeNull()
+  })
+
+  it('parseSidecar returns null for column with invalid PK type', () => {
+    expect(parseSidecar(JSON.stringify({
+      version: 1,
+      tables: {
+        'db-1': [{ id: 't1', name: 'users', columns: [{ name: 'id', type: 'int', isPrimaryKey: 'yes' }] }],
+      },
+    }))).toBeNull()
+  })
+})
+
+describe('serializeSidecar / parseSidecar round-trip with tables', () => {
+  it('serializes and deserializes tables correctly', () => {
+    const sidecar = {
+      version: 1 as const,
+      tables: {
+        'db-container-1': [
+          {
+            id: 't_users',
+            name: 'users',
+            description: 'User accounts',
+            columns: [
+              { name: 'id', type: 'int', isPrimaryKey: true },
+              { name: 'email', type: 'varchar(255)' },
+              { name: 'department_id', type: 'int', isForeignKey: true },
+            ],
+          },
+        ],
+      },
+    }
+    const json = serializeSidecar(sidecar)
+    const parsed = parseSidecar(json)
+    expect(parsed).not.toBeNull()
+    expect(parsed!.tables!['db-container-1']).toHaveLength(1)
+    expect(parsed!.tables!['db-container-1'][0]).toMatchObject({
+      id: 't_users',
+      name: 'users',
+      description: 'User accounts',
+    })
+  })
+})

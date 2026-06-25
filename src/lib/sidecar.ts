@@ -1,4 +1,4 @@
-import type { Workspace, ElementStatus, LineStyle } from '@/types/model'
+import type { Workspace, ElementStatus, LineStyle, TableDef } from '@/types/model'
 import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
@@ -46,11 +46,28 @@ interface SidecarView {
   expanded?: Record<string, SidecarExpandedElement>
 }
 
+interface SidecarTableColumn {
+  name: string
+  type: string
+  isPrimaryKey?: boolean
+  isForeignKey?: boolean
+  description?: string
+}
+
+interface SidecarTable {
+  id: string
+  name: string
+  description?: string
+  columns: SidecarTableColumn[]
+}
+
 export interface SidecarData {
   version: 1
   elements?: Record<string, SidecarElement>
   relationships?: Record<string, SidecarRelationship>
   views?: Record<string, SidecarView>
+  /** Database table definitions, keyed by container ID. Sidecar-only, never in DSL. */
+  tables?: Record<string, SidecarTable[]>
 }
 
 function isSidecarElement(value: unknown): value is SidecarElement {
@@ -88,17 +105,40 @@ function isSidecarView(value: unknown): value is SidecarView {
   return true
 }
 
+function isSidecarTableColumn(value: unknown): value is SidecarTableColumn {
+  if (!isRecord(value)) return false
+  if (typeof value.name !== 'string' || typeof value.type !== 'string') return false
+  if ('isPrimaryKey' in value && value.isPrimaryKey !== undefined && typeof value.isPrimaryKey !== 'boolean') return false
+  if ('isForeignKey' in value && value.isForeignKey !== undefined && typeof value.isForeignKey !== 'boolean') return false
+  if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
+  return true
+}
+
+function isSidecarTable(value: unknown): value is SidecarTable {
+  if (!isRecord(value)) return false
+  if (typeof value.id !== 'string' || typeof value.name !== 'string') return false
+  if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
+  if (!Array.isArray(value.columns) || !value.columns.every(isSidecarTableColumn)) return false
+  return true
+}
+
 function isSidecarData(value: unknown): value is SidecarData {
   if (!isRecord(value) || value.version !== 1) return false
   if ('elements' in value && value.elements !== undefined && !isRecordOf(value.elements, isSidecarElement)) return false
   if ('relationships' in value && value.relationships !== undefined && !isRecordOf(value.relationships, isSidecarRelationship)) return false
   if ('views' in value && value.views !== undefined && !isRecordOf(value.views, isSidecarView)) return false
+  if ('tables' in value && value.tables !== undefined) {
+    if (!isRecord(value.tables)) return false
+    for (const tableList of Object.values(value.tables)) {
+      if (!Array.isArray(tableList) || !tableList.every(isSidecarTable)) return false
+    }
+  }
   return true
 }
 
 // ─── Extract sidecar from workspace ─────────────────────────────────
 
-export function extractSidecar(workspace: Workspace): SidecarData | null {
+export function extractSidecar(workspace: Workspace, tableData?: Record<string, TableDef[]>): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
   let hasData = false
 
@@ -133,13 +173,38 @@ export function extractSidecar(workspace: Workspace): SidecarData | null {
   }
   if (Object.keys(views).length > 0) sidecar.views = views
 
+  // Tables: database table definitions keyed by container ID
+  if (tableData) {
+    const tables: Record<string, SidecarTable[]> = {}
+    for (const [containerId, tableList] of Object.entries(tableData)) {
+      if (tableList.length > 0) {
+        tables[containerId] = tableList.map(t => ({
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          columns: t.columns.map(c => ({
+            name: c.name,
+            type: c.type,
+            ...(c.isPrimaryKey !== undefined ? { isPrimaryKey: c.isPrimaryKey } : {}),
+            ...(c.isForeignKey !== undefined ? { isForeignKey: c.isForeignKey } : {}),
+            ...(c.description !== undefined ? { description: c.description } : {}),
+          })),
+        }))
+        hasData = true
+      }
+    }
+    if (Object.keys(tables).length > 0) sidecar.tables = tables
+  }
+
   return hasData ? sidecar : null
 }
 
 // ─── Apply sidecar to workspace ─────────────────────────────────────
 
-export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
-  if (sidecar.version !== 1) return
+/** Apply sidecar data to a workspace. Returns table definitions extracted from
+ *  the sidecar (keyed by container ID), or null if the sidecar has no tables. */
+export function applySidecar(workspace: Workspace, sidecar: SidecarData): Record<string, TableDef[]> | null {
+  if (sidecar.version !== 1) return null
 
   // Elements — only apply known sidecar properties
   if (sidecar.elements) {
@@ -213,6 +278,28 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): void {
       }
     }
   }
+
+  // Tables: extract from sidecar
+  if (sidecar.tables) {
+    const tableData: Record<string, TableDef[]> = {}
+    for (const [containerId, tableList] of Object.entries(sidecar.tables)) {
+      tableData[containerId] = tableList.map(t => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        columns: t.columns.map(c => ({
+          name: c.name,
+          type: c.type,
+          isPrimaryKey: c.isPrimaryKey,
+          isForeignKey: c.isForeignKey,
+          description: c.description,
+        })),
+      }))
+    }
+    return tableData
+  }
+
+  return null
 }
 
 // ─── Sidecar filename ───────────────────────────────────────────────
