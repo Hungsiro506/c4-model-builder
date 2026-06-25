@@ -778,9 +778,19 @@ function DatabaseTablesTab({ containerId }: { containerId: string }) {
   const setMermaidOverlayContainerId = useWorkspaceStore((s) => s.setMermaidOverlayContainerId)
   const [expandedTable, setExpandedTable] = useState<string | null>(null)
 
+  const inputStyle: React.CSSProperties = {
+    padding: '4px 8px',
+    background: 'var(--color-surface-1)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--color-text-primary)',
+    fontSize: 12,
+    outline: 'none',
+  }
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
         <button
           className="btn-surface text-xs"
           style={{ flex: 1 }}
@@ -802,8 +812,8 @@ function DatabaseTablesTab({ containerId }: { containerId: string }) {
       </div>
 
       {tableData.length === 0 && (
-        <div className="text-xs" style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: 20 }}>
-          No tables defined. Add a table or open the Mermaid editor to create them from text.
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'center', padding: 16 }}>
+          No tables defined. Add a table or open the Mermaid editor.
         </div>
       )}
 
@@ -816,52 +826,58 @@ function DatabaseTablesTab({ containerId }: { containerId: string }) {
             overflow: 'hidden',
           }}
         >
-          {/* Table header */}
-          <button
+          {/* Table header — not a button, uses a clickable div to avoid nesting issues */}
+          <div
             onClick={() => setExpandedTable(expandedTable === table.id ? null : table.id)}
             style={{
-              width: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '8px 12px',
+              padding: '7px 12px',
               background: 'var(--color-surface-2)',
-              border: 'none',
               cursor: 'pointer',
-              color: 'var(--color-text-primary)',
-              fontSize: 12,
-              fontWeight: 600,
               borderBottom: expandedTable === table.id ? '1px solid var(--color-border)' : 'none',
             }}
           >
-            <EditableField
-              value={table.name}
-              placeholder="Table name"
-              aria-label="Table name"
-              onCommit={(v) => updateTable(containerId, table.id, { name: v || 'untitled' })}
-            />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              {table.name || 'Untitled'}
+            </span>
             <button
               onClick={(e) => {
                 e.stopPropagation()
+                if (expandedTable === table.id) setExpandedTable(null)
                 deleteTable(containerId, table.id)
               }}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--color-text-muted)',
-                cursor: 'pointer',
-                fontSize: 14,
-                padding: '0 2px',
-              }}
+              style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}
               title="Delete table"
             >
               ×
             </button>
-          </button>
+          </div>
 
-          {/* Columns (expanded) */}
+          {/* Table name + description editor (always visible when expanded) */}
           {expandedTable === table.id && (
-            <div style={{ padding: '4px 0' }}>
+            <div style={{ padding: 10, borderBottom: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                type="text"
+                value={table.name}
+                placeholder="Table name"
+                onChange={(e) => updateTable(containerId, table.id, { name: e.target.value })}
+                style={{ ...inputStyle, fontWeight: 600 }}
+              />
+              <input
+                type="text"
+                value={table.description ?? ''}
+                placeholder="Optional description"
+                onChange={(e) => updateTable(containerId, table.id, { description: e.target.value })}
+                style={{ ...inputStyle, color: 'var(--color-text-secondary)' }}
+              />
+            </div>
+          )}
+
+          {/* Columns editor (expanded) */}
+          {expandedTable === table.id && (
+            <div style={{ padding: '2px 0' }}>
               {table.columns.map((col, i) => (
                 <div
                   key={i}
@@ -869,50 +885,55 @@ function DatabaseTablesTab({ containerId }: { containerId: string }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
-                    padding: '3px 12px',
-                    fontSize: 11,
+                    padding: '4px 10px',
                   }}
                 >
+                  {/* PK checkbox */}
                   <input
                     type="checkbox"
                     checked={col.primaryKey}
                     onChange={(e) => updateColumn(containerId, table.id, i, { primaryKey: e.target.checked })}
                     title="Primary Key"
-                    style={{ width: 14, height: 14, accentColor: 'var(--color-accent)' }}
+                    style={{ width: 14, height: 14, accentColor: 'var(--color-accent)', flexShrink: 0 }}
                   />
+                  {/* Column name */}
                   <input
                     type="text"
                     value={col.name}
-                    placeholder="col"
+                    placeholder="name"
                     onChange={(e) => updateColumn(containerId, table.id, i, { name: e.target.value })}
-                    style={{
-                      flex: 1,
-                      width: 60,
-                      padding: '2px 4px',
-                      background: 'var(--color-surface-1)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 3,
-                      color: 'var(--color-text-primary)',
-                      fontSize: 11,
-                    }}
+                    style={{ ...inputStyle, flex: 1, minWidth: 50, fontSize: 11, padding: '3px 6px' }}
                   />
+                  {/* Column type */}
                   <input
                     type="text"
                     value={col.type}
                     placeholder="type"
                     onChange={(e) => updateColumn(containerId, table.id, i, { type: e.target.value })}
                     style={{
-                      width: 70,
-                      padding: '2px 4px',
-                      background: 'var(--color-surface-1)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 3,
-                      color: 'var(--color-text-primary)',
+                      ...inputStyle,
+                      width: 80,
                       fontSize: 11,
-                      fontFamily: 'monospace',
+                      padding: '3px 6px',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+                      flexShrink: 0,
                     }}
                   />
-                  <label title="Nullable" style={{ fontSize: 10, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                  {/* Nullable toggle */}
+                  <label
+                    title={col.nullable ? 'Nullable (click to set NOT NULL)' : 'NOT NULL (click to set nullable)'}
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: col.nullable ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      minWidth: 22,
+                    }}
+                  >
                     <input
                       type="checkbox"
                       checked={col.nullable}
@@ -921,14 +942,13 @@ function DatabaseTablesTab({ containerId }: { containerId: string }) {
                     />
                     N
                   </label>
+                  {/* Delete column */}
                   <button
                     onClick={() => deleteColumn(containerId, table.id, i)}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-text-muted)',
-                      cursor: 'pointer',
-                      fontSize: 12,
+                      background: 'none', border: 'none',
+                      color: 'var(--color-text-muted)', cursor: 'pointer',
+                      fontSize: 14, padding: 0, lineHeight: 1, flexShrink: 0,
                     }}
                     title="Delete column"
                   >
@@ -940,14 +960,13 @@ function DatabaseTablesTab({ containerId }: { containerId: string }) {
                 onClick={() => addColumn(containerId, table.id)}
                 style={{
                   width: '100%',
-                  padding: '5px 12px',
+                  padding: '6px 10px',
                   background: 'transparent',
                   border: 'none',
                   color: 'var(--color-text-muted)',
-                  fontSize: 10,
+                  fontSize: 11,
                   cursor: 'pointer',
                   textAlign: 'left',
-                  marginTop: 2,
                 }}
               >
                 + Add Column
