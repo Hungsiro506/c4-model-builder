@@ -5,8 +5,8 @@ Keep current as the feature changes.
 
 > Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
 > **PR B1 merged** (2026-06-25). Branch `feat/db-table-view-b1` (PR #23).
-> PR B2 in progress. Branch `feat/db-table-view-b2`.
-> PR B3 deferred (Mermaid overlay).
+> **PR B2 open** (PR #24). Branch `feat/db-table-view-b2`.
+> PR B2.5 planned (FK edges). PR B3 deferred (Mermaid overlay).
 
 ## Problem
 
@@ -132,6 +132,14 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - Click table node → RightPanel shows column editor (name, columns, types)
 - No Mermaid overlay, no RightPanel "Tables" tab (single creation path: canvas "+")
 
+### PR B2.5 — Foreign key edges between tables (planned)
+- FK resolver: parse `isForeignKey` columns → build source→target table.column pairs
+- `buildTableEdges()` in `canvasBuilders.ts`: connect `__table__cid__t1` → `__table__cid__t2`
+- Dagre routing: add FK edges to dagre graph in `layoutSubtree` so layout accounts for them
+- Edge rendering: straight/curved thin dashed edges, distinct from model relationship edges
+- Column editor: FK toggle + target table.column picker (replaces plain `isForeignKey` boolean)
+- Self-contained: edge builder + FK resolver + small editor tweak, ~2–3 files
+
 ### PR B3 — Mermaid ERD editor (deferred, minor)
 - `src/components/canvas/MermaidOverlay.tsx`: full-canvas ERD text editor
 - Toggle button in table column editor
@@ -147,6 +155,16 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - No dropdown `useState` inside React Flow nodes (causes re-render loops)
 
 ## Progress log
+
+### 2026-06-25 — PR B2 open (PR #24)
+- Database expand: Table rendering + canvas-driven column editing.
+- TableNode renders table name + columns with PK/FK indicators on canvas.
+- DB boundary "+" shows "Table" (adds to sidecar tableData).
+- Click table node → FloatingInspector shows TableEditor (name, type, PK toggle).
+- expandComposite sources tables from tableData for DB containers.
+- Canvas wires tableData through expand/boundary/edge pipelines.
+- FloatingInspector visibility includes table selection.
+- 20 new tests. To be squash-merged as `feat: add database table view with canvas-driven editing`.
 
 ### 2026-06-25 — PR B1 merged (PR #23)
 - System expand "+" → Container / Database dropdown.
