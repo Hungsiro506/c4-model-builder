@@ -120,8 +120,8 @@ test.describe('DB table view — DSL preservation', () => {
     )
     await workspace.page.waitForTimeout(800)
 
-    // The expand boundary should appear
-    const boundary = workspace.page.locator(`[id="__expand_boundary__${systemId}"]`)
+    // The expand boundary should appear as a React Flow node
+    const boundary = workspace.page.locator(`[data-id="__expand_boundary__${systemId}"]`)
     await expect(boundary).toBeVisible({ timeout: 5000 })
 
     // Add a Database container via the store directly (simulating the menu click)
