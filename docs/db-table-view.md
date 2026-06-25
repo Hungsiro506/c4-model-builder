@@ -4,8 +4,9 @@ Context doc for AI-assisted development. Records what was built and **why**.
 Keep current as the feature changes.
 
 > Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
-> **PR B1 open** (PR #23). Branch `feat/db-table-view-b1`.
-> PR B2 pending.
+> **PR B1 merged** (2026-06-25). Branch `feat/db-table-view-b1` (PR #23).
+> PR B2 in progress. Branch `feat/db-table-view-b2`.
+> PR B3 deferred (Mermaid overlay).
 
 ## Problem
 
@@ -121,13 +122,21 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - System "+" shows Container | Database (L1→L2); Container "+" shows Component (L2→L3)
 - Adds Database containers from expand mode without view switching
 
-### PR B2 — Database expand "+" → Table / Component dropdown + full UX
-- `src/components/canvas/nodes/TableNode.tsx`: renders table + columns
-- `src/lib/expandComposite.ts`: `ExpandContext.tableData`, `layoutSubtree` for DB
+### PR B2 — Database expand: Table rendering + canvas-driven editing
+- `src/components/canvas/nodes/TableNode.tsx`: renders table name + columns on canvas
+- `src/lib/expandComposite.ts`: `ExpandContext.tableData`, `layoutSubtree` sources tables for DB containers
 - `src/components/canvas/Canvas.tsx`: wire `tableData` into expand pipeline
-- `src/components/layout/RightPanel.tsx`: `DatabaseTablesTab`
-- `src/components/canvas/MermaidOverlay.tsx`: full-canvas ERD editor
-- `src/components/layout/FloatingInspector.tsx`: wider panel
+- `src/components/layout/RightPanel.tsx`: column editor when a table is selected (no "Tables" tab)
+- `src/components/canvas/nodes/index.ts`: register `"table"` node type
+- "+" on DB boundary adds Tables only (existing Components still render, back compat)
+- Click table node → RightPanel shows column editor (name, columns, types)
+- No Mermaid overlay, no RightPanel "Tables" tab (single creation path: canvas "+")
+
+### PR B3 — Mermaid ERD editor (deferred, minor)
+- `src/components/canvas/MermaidOverlay.tsx`: full-canvas ERD text editor
+- Toggle button in table column editor
+- Self-contained: one file + one `<MermaidOverlay />` in Canvas + one store toggle
+- Zero coupling to B2 — add/remove without touching other files
 
 ### Design decisions (from spike)
 - Tables in sidecar, never DSL (through-line constraint)
@@ -139,13 +148,13 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 
 ## Progress log
 
-### 2026-06-25 — PR B1 open (PR #23)
+### 2026-06-25 — PR B1 merged (PR #23)
 - System expand "+" → Container / Database dropdown.
 - `isDatabaseContainer()` helper in `canvasBuilders.ts`.
 - SoftwareSystem boundary (L1→L2): dropdown shows Container | Database.
 - Container boundary (L2→L3): dropdown shows Component only.
 - Component excluded from System "+" — Components are L3, belong inside Containers.
-- 11 new tests. To be squash-merged as `feat: add Database container from expand dropdown`.
+- 11 new tests. Squash-merged as `feat: add Database container from expand dropdown`.
 
 ### 2026-06-25 — PR A merged (PR #18)
 - Foundation layer: types, Mermaid parser/generator, sidecar tables, table-slice store.
