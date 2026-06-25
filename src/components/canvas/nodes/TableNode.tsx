@@ -29,7 +29,8 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
     ? `${style.background}1a` // ~10% opacity
     : 'var(--color-tint-container)'
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation() // prevent React Flow from intercepting the click
     selectTable(data.containerId, tableDef.id)
   }, [selectTable, data.containerId, tableDef.id])
 

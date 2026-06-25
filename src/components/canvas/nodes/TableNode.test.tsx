@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { ReactFlowProvider } from '@xyflow/react'
 import TableNode, { type TableNodeData } from './TableNode'
 import { useWorkspaceStore } from '@/store/workspace'
