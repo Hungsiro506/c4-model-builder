@@ -51,7 +51,7 @@ export default function FloatingInspector() {
         top: 72,
         right: 14,
         zIndex: 50,
-        width: 260,
+        width: 300,
         maxHeight: 'calc(100dvh - 86px)',
         overflowY: 'auto',
         borderRadius: 'var(--radius-lg)',
