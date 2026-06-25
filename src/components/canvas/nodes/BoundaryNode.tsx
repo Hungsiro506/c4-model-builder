@@ -1,5 +1,5 @@
-import { memo, useState, useRef, useEffect } from 'react'
-import { Minimize2, Plus, Database, Box } from 'lucide-react'
+import { memo } from 'react'
+import { Minimize2, Plus } from 'lucide-react'
 import type { NodeProps } from '@xyflow/react'
 import { useWorkspaceStore } from '@/store/workspace'
 import NodeHandles from './NodeHandles'
@@ -21,32 +21,7 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const addTable = useWorkspaceStore((s) => s.addTable)
   const isSystem = data.typeLabel === 'Software System'
   const isDatabase = data.typeLabel === 'Database'
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
 
-  // Close menu on outside click (deferred to avoid conflict with the opening click)
-  useEffect(() => {
-    if (!menuOpen) return
-    const ref = menuRef.current
-    const id = setTimeout(() => {
-      const handler = (e: MouseEvent) => {
-        if (ref && !ref.contains(e.target as Node)) setMenuOpen(false)
-      }
-      document.addEventListener('mousedown', handler, true)
-      ;(ref as Record<string, unknown> | null)!.cleanup = () =>
-        document.removeEventListener('mousedown', handler, true)
-    }, 0)
-    return () => {
-      clearTimeout(id)
-      const cleanup = (ref as Record<string, unknown> | null)?.cleanup as (() => void) | undefined
-      if (cleanup) cleanup()
-    }
-  }, [menuOpen])
-
-  // Populated expand-in-place boundaries are draggable as a unit: the whole box
-  // body grabs (children are separate nodes stacked on top, so they stay
-  // interactive). Empty boundaries + scope/group boundaries stay pointer-
-  // transparent so clicks/pans pass through to the canvas underneath.
   const bodyDraggable = !!data.collapsible && !data.empty
   const emptyTitle = isDatabase
     ? 'Add tables to this database'
@@ -54,21 +29,20 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
       ? 'Add containers to this system'
       : 'Add components to this container'
 
-  // Expand-in-place add: create a child of the expanded element, shown inside
-  // this boundary via the parent's expansion. skipActiveView keeps it out of
-  // the underlying (e.g. landscape) view so it never renders as a stray node.
-  const addChild = (tag?: string) => {
+  // Expand-in-place add. For systems, Shift+click adds a Database container.
+  const addChild = (e: React.MouseEvent) => {
     if (!data.elementId) return
-    if (isSystem) addContainer(data.elementId, 'New Container', undefined, tag, { skipActiveView: true })
-    else if (isDatabase) addTable(data.elementId, 'new_table')
-    else addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
+    if (isSystem) {
+      const tag = e.shiftKey ? 'Database' : undefined
+      addContainer(data.elementId, 'New Container', undefined, tag, { skipActiveView: true })
+    } else if (isDatabase) {
+      addTable(data.elementId, 'new_table')
+    } else {
+      addComponent(data.elementId, 'New Component', undefined, { skipActiveView: true })
+    }
   }
 
-  const ariaLabel = isDatabase
-    ? `Add table to ${data.name}`
-    : isSystem
-      ? `Add container to ${data.name}`
-      : `Add component to ${data.name}`
+  const tooltip = isSystem ? 'Add container (Shift+click for Database)' : isDatabase ? 'Add table' : 'Add component'
 
   return (
     <>
@@ -112,77 +86,21 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
         </div>
         {data.collapsible && data.elementId && (
           <>
-            {isSystem ? (
-              <div ref={menuRef} style={{ position: 'relative', marginTop: 1 }}>
-                <button
-                  className="c4-node-action-btn nodrag"
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
-                  aria-label="Add element"
-                >
-                  <Plus size={11} aria-hidden="true" />
-                </button>
-                {menuOpen && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      marginTop: 4,
-                      zIndex: 9999,
-                      minWidth: 170,
-                      padding: 4,
-                      background: 'var(--color-surface-1)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-md)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                    }}
-                  >
-                    <button
-                      className="hover-lift"
-                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); addChild() }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                        padding: '6px 10px', border: 'none', borderRadius: 'var(--radius-sm)',
-                        background: 'transparent', color: 'var(--color-text-secondary)',
-                        fontSize: 12, fontWeight: 500, cursor: 'pointer', textAlign: 'left',
-                      }}
-                    >
-                      <Box size={13} />
-                      New Container
-                    </button>
-                    <button
-                      className="hover-lift"
-                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); addChild('Database') }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                        padding: '6px 10px', border: 'none', borderRadius: 'var(--radius-sm)',
-                        background: 'transparent', color: 'var(--color-text-secondary)',
-                        fontSize: 12, fontWeight: 500, cursor: 'pointer', textAlign: 'left',
-                      }}
-                    >
-                      <Database size={13} style={{ color: 'var(--color-type-container)' }} />
-                      New Database
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button
-                className="c4-node-action-btn nodrag"
-                style={{ marginTop: 1 }}
-                onClick={(e) => { e.stopPropagation(); addChild() }}
-                aria-label={ariaLabel}
-              >
-                <Plus size={11} aria-hidden="true" />
-              </button>
-            )}
+            <button
+              className="c4-node-action-btn nodrag"
+              style={{ marginTop: 1 }}
+              onClick={(e) => { e.stopPropagation(); addChild(e) }}
+              title={tooltip}
+            >
+              <Plus size={11} />
+            </button>
             <button
               className="c4-node-action-btn nodrag"
               style={{ marginTop: 1 }}
               onClick={(e) => { e.stopPropagation(); collapseElement(data.elementId!) }}
               aria-label={`Collapse ${data.name}`}
             >
-              <Minimize2 size={11} aria-hidden="true" />
+              <Minimize2 size={11} />
             </button>
           </>
         )}
@@ -202,9 +120,6 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
           userSelect: 'none',
         }}
       >
-      {/* Expand boundaries can be edge endpoints: a parent-level relationship
-          (e.g. A→B) attaches to this wrapper box when B is expanded, instead of
-          diving onto a child. Handles are invisible anchors for that routing. */}
       {data.collapsible && <NodeHandles />}
       {data.empty && (
         <div
@@ -228,43 +143,11 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
             <line x1="21" y1="32" x2="27" y2="32" stroke="currentColor" strokeWidth="2"/>
             <line x1="24" y1="15" x2="24" y2="25" stroke="currentColor" strokeWidth="2"/>
           </svg>
-          <span
-            style={{
-              fontSize: 'var(--text-sm)',
-              fontWeight: 700,
-              color: 'var(--color-text-secondary)',
-              marginBottom: 8,
-            }}
-          >
+          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
             {emptyTitle}
           </span>
-          <span
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              flexWrap: 'wrap',
-              fontSize: 'var(--text-xs)',
-              color: 'var(--color-text-muted)',
-            }}
-          >
-            Press
-            <kbd
-              style={{
-                padding: '2px 7px',
-                borderRadius: 6,
-                background: 'var(--glass-overlay-sm)',
-                border: '1px solid var(--glass-overlay-md)',
-                fontSize: 12,
-                fontFamily: 'monospace',
-                fontWeight: 700,
-                lineHeight: '18px',
-              }}
-            >
-              A
-            </kbd>
-            to add an element
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+            Press <kbd style={{ padding: '2px 7px', borderRadius: 6, background: 'var(--glass-overlay-sm)', border: '1px solid var(--glass-overlay-md)', fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: '18px' }}>A</kbd> to add an element
           </span>
         </div>
       )}
