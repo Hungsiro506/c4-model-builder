@@ -221,8 +221,8 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                       addFkEdge(containerId, tableId, newTgt)
                     }
                   }}
-                  className="text-xxs bg-white/5 border border-white/10 rounded px-1 py-0.5"
-                  style={{ color: 'var(--color-text-primary)' }}
+                  className="text-xxs rounded px-1 py-0.5"
+                  style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }}
                 >
                   <option value="">Select table...</option>
                   {otherTables.map(t => (
@@ -238,8 +238,8 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                         updateFkEdge(containerId, fkEdge.id, { targetColumnId: newCol })
                       }
                     }}
-                    className="text-xxs bg-white/5 border border-white/10 rounded px-1 py-0.5"
-                    style={{ color: 'var(--color-text-primary)' }}
+                    className="text-xxs rounded px-1 py-0.5"
+                    style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }}
                   >
                     <option value="">Any PK col</option>
                     {targetColumns.map(c => (
