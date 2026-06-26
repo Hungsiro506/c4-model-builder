@@ -197,3 +197,37 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - Dagre wiring: FK edges participate in layout so tables arrange by FK relationships
 - FK toggle per column in TableEditor (indigo badge next to PK)
 - 9 new tests. To be squash-merged as `feat: add foreign key edges between database tables`.
+
+### Implementation decisions (from PR #25)
+
+1. **FK edges are editor-only, no drag-to-connect.** Drag-to-connect was tried then removed
+   — the UX is fiddly on small table nodes. Column editor dropdowns are simpler and more
+   explicit. TableNode has hidden handles only for ReactFlow edge routing (error #008).
+
+2. **Auto-resolution disabled.** Naming convention (`customer_id` → `customers.id`) was
+   initially built but removed. User must explicitly pick target table from dropdown.
+   `resolveTableFKs()` still exists but is unused in the rendering pipeline.
+
+3. **Column IDs use `crypto.randomUUID()` (UUID v7), not `nanoid`.** Table/column/FK-edge
+   IDs are sidecar-only (never in DSL), so hyphens are safe. Model-level element IDs still
+   use `nanoid` (no hyphens, valid DSL identifiers).
+
+4. **FK matching uses column IDs only, never names.** Column names can have whitespace
+   and follow no pattern. `col.id` is the only lookup key.
+
+5. **`FkEdgeDef` stored as `fkEdges: Record<string, FkEdgeDef[]>` keyed by containerId.**
+   Same pattern as `tableData`. Persisted in sidecar under `fkEdges` field. Container-scoped
+   — same table name in different DB containers = different tables, no overlap.
+
+6. **No FK cascade on table/column delete.** Reading `s.fkEdges` inside immer `set()`
+   callbacks caused a ~20s E2E performance regression even when the field was empty `{}`.
+   Immer draft reads create proxy overhead — harmless but expensive in aggregate. Orphaned
+   FK edges are silent no-ops: `buildTableEdges` skips them when source/target tables
+   don't exist.
+
+7. **FK toggle just marks the column.** Edge only created when user picks target table
+   from dropdown (or via `addFkEdge`). This avoids auto-creating edges with wrong targets.
+
+8. **`sourceHandle`/`targetHandle` required on every FK edge.** ReactFlow needs handles
+   to exist on source/target nodes for edge routing (error #008). TableNode provides
+   invisible `bottom-source`/`top-target` handles — no UI, just routing anchors.
