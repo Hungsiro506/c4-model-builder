@@ -5,8 +5,8 @@ Keep current as the feature changes.
 
 > Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
 > **PR B1 merged** (2026-06-25). Branch `feat/db-table-view-b1` (PR #23).
-> **PR B2 open** (PR #24). Branch `feat/db-table-view-b2`.
-> PR B2.5 planned (FK edges). PR B3 deferred (Mermaid overlay).
+> **PR B2 merged** (2026-06-25). Branch `feat/db-table-view-b2` (PR #24).
+> PR B2.5 next (FK edges). PR B3 deferred (Mermaid overlay).
 
 ## Problem
 
@@ -156,7 +156,7 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 
 ## Progress log
 
-### 2026-06-25 — PR B2 open (PR #24)
+### 2026-06-25 — PR B2 merged (PR #24)
 - Database expand: Table rendering + canvas-driven column editing.
 - TableNode renders table name + columns with PK/FK indicators on canvas.
 - DB boundary "+" shows "Table" (adds to sidecar tableData).
