@@ -88,6 +88,9 @@ if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__testAddFkEdge = (containerId: string, sourceTableId: string, targetTableId: string, sourceColumnId?: string) => {
     return useWorkspaceStore.getState().addFkEdge(containerId, sourceTableId, targetTableId, sourceColumnId)
   }
+  ;(window as unknown as Record<string, unknown>).__testUpdateColumn = (containerId: string, tableId: string, columnId: string, patch: Record<string, boolean | string>) => {
+    useWorkspaceStore.getState().updateColumn(containerId, tableId, columnId, patch)
+  }
 }
 
 // Global unhandled error handlers.
