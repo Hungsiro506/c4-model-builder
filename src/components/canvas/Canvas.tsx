@@ -1390,6 +1390,17 @@ export default function Canvas() {
               <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--canvas-selection, var(--color-accent))" />
             </marker>
             <marker
+              id="c4-arrow-fk"
+              viewBox="0 0 10 10"
+              refX="10"
+              refY="5"
+              markerWidth={8}
+              markerHeight={8}
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-fk-edge, #6366f1)" />
+            </marker>
+            <marker
               id="c4-dot"
               viewBox="0 0 10 10"
               refX="5"

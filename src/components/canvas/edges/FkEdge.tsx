@@ -34,6 +34,7 @@ function FkEdge({
         id={id}
         path={edgePath}
         style={edgeStyle}
+        markerEnd="url(#c4-arrow-fk)"
       />
       {data?.label && (
         <EdgeLabelRenderer>
@@ -47,7 +48,7 @@ function FkEdge({
               padding: '1px 4px',
               borderRadius: 4,
               background: 'color-mix(in srgb, var(--canvas-bg, var(--color-bg-primary)) 75%, transparent)',
-              color: 'var(--color-fk-edge, var(--color-text-muted))',
+              color: 'var(--color-fk-edge, #6366f1)',
               whiteSpace: 'nowrap',
             }}
           >
