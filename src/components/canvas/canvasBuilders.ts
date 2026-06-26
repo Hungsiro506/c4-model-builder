@@ -1139,6 +1139,7 @@ export function buildTableEdges(
   tables: TableDef[],
   manualFkEdges?: FkEdgeDef[],
 ): Edge[] {
+  console.log('[FK buildTableEdges] container:', containerId, 'tables#:', tables.length, 'manual#:', manualFkEdges?.length)
   const edges: Edge[] = []
 
   // Auto-resolved FK edges from naming convention
@@ -1207,5 +1208,6 @@ export function buildTableEdges(
     })
   }
 
+  console.log('[FK buildTableEdges] returning', edges.length, 'edges:', edges.map(e => e.id))
   return edges
 }
