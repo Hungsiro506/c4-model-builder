@@ -19,6 +19,7 @@ import {
   tableNodeId,
   getTableNodeSize,
   buildTableNode,
+  resolveTableFKs,
   type ContentNodeContext,
 } from '@/components/canvas/canvasBuilders'
 
@@ -112,6 +113,18 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
   for (const rel of ctx.relationships) {
     if (childIds.has(rel.sourceId) && childIds.has(rel.destinationId)) {
       g.setEdge(rel.sourceId, rel.destinationId)
+    }
+  }
+  // FK edges between table nodes: resolve and wire into dagre so layout
+  // accounts for foreign key relationships between tables.
+  if (tables.length > 1) {
+    const fkPairs = resolveTableFKs(tables)
+    for (const pair of fkPairs) {
+      const srcId = tableNodeId(element.id, pair.sourceTableId)
+      const tgtId = tableNodeId(element.id, pair.targetTableId)
+      if (childIds.has(srcId) && childIds.has(tgtId)) {
+        g.setEdge(srcId, tgtId)
+      }
     }
   }
   dagre.layout(g)

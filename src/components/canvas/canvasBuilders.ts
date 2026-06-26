@@ -1049,3 +1049,120 @@ export function buildCompositeEdges(
 
   return assembleEdges(edgeInfos, posMap, nodes, filters)
 }
+
+// ─── FK Edge types ──────────────────────────────────────────────────────
+
+export interface FKEdgePair {
+  sourceTableId: string
+  sourceColumnId: string
+  targetTableId: string
+  targetColumnId: string
+}
+
+/** Scan tables in a container, find isForeignKey columns, match to target
+ *  table + PK column via naming convention: `customer_id` → `customers.id`. */
+export function resolveTableFKs(tables: TableDef[]): FKEdgePair[] {
+  if (tables.length === 0) return []
+
+  // Build lookup: table id → table def, and table name → table def
+  const tableByName = new Map<string, TableDef>()
+  const pkColumnByName = new Map<string, Map<string, string>>() // table id → pk name → col id
+
+  for (const t of tables) {
+    tableByName.set(t.name.toLowerCase(), t)
+    const pkMap = new Map<string, string>()
+    for (const col of t.columns) {
+      if (col.isPrimaryKey) pkMap.set(col.name, col.id ?? col.name)
+    }
+    if (pkMap.size > 0) pkColumnByName.set(t.id, pkMap)
+  }
+
+  const pairs: FKEdgePair[] = []
+
+  for (const table of tables) {
+    for (const col of table.columns) {
+      if (!col.isForeignKey) continue
+      const colId = col.id ?? col.name
+
+      // Try to derive target table from FK column name:
+      //   `customer_id` → stem "customer" → table "customers"
+      const fkName = col.name
+      const idSuffix = fkName.lastIndexOf('_id')
+      if (idSuffix <= 0) continue // no "_id" suffix at end (not zero-length stem)
+
+      const stem = fkName.slice(0, idSuffix).toLowerCase()
+
+      // Try common plural forms to find the target table
+      const candidateNames = [
+        stem,           // e.g. "customer" → "customer"
+        `${stem}s`,     // e.g. "customer" → "customers"
+        `${stem}es`,    // e.g. "address" → "addresses"
+      ]
+      // Also handle stems ending in 'y' → 'ies': "category" → "categories"
+      if (stem.endsWith('y')) {
+        candidateNames.push(`${stem.slice(0, -1)}ies`)
+      }
+
+      let targetTable: TableDef | undefined
+      for (const candidate of candidateNames) {
+        targetTable = tableByName.get(candidate)
+        if (targetTable && targetTable.id !== table.id) break
+        targetTable = undefined
+      }
+
+      if (!targetTable) continue
+
+      // Target table must have a PK column named "id" (convention)
+      const targetPKs = pkColumnByName.get(targetTable.id)
+      if (!targetPKs || !targetPKs.has('id')) continue
+
+      const targetColId = targetPKs.get('id')!
+
+      pairs.push({
+        sourceTableId: table.id,
+        sourceColumnId: colId,
+        targetTableId: targetTable.id,
+        targetColumnId: targetColId,
+      })
+    }
+  }
+
+  return pairs
+}
+
+/** Build React Flow edges between table nodes for FK relationships. */
+export function buildTableEdges(
+  containerId: string,
+  tables: TableDef[],
+): Edge[] {
+  const pairs = resolveTableFKs(tables)
+  if (pairs.length === 0) return []
+
+  const edges: Edge[] = []
+  for (const pair of pairs) {
+    const sourceTable = tables.find(t => t.id === pair.sourceTableId)
+    const sourceCol = sourceTable?.columns.find(c => (c.id ?? c.name) === pair.sourceColumnId)
+
+    edges.push({
+      id: `__fk__${containerId}__${pair.sourceTableId}__${pair.sourceColumnId}__${pair.targetTableId}`,
+      source: tableNodeId(containerId, pair.sourceTableId),
+      target: tableNodeId(containerId, pair.targetTableId),
+      type: 'fkEdge',
+      data: {
+        label: sourceCol?.name ?? '',
+        sourceColumnId: pair.sourceColumnId,
+        targetColumnId: pair.targetColumnId,
+      },
+      style: {
+        stroke: 'var(--color-fk-edge, #6366f1)',
+        strokeDasharray: '6 3',
+        strokeWidth: 1.5,
+      },
+      selectable: false,
+      focusable: false,
+      zIndex: 3, // above boundary overlays but below table nodes (5)
+    })
+  }
+
+  return edges
+}

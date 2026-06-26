@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNodes, isDatabaseContainer, tableNodeId, getTableNodeSize, buildTableNode, buildParentMap } from './canvasBuilders'
+import { buildNodes, isDatabaseContainer, tableNodeId, getTableNodeSize, buildTableNode, buildParentMap, resolveTableFKs, buildTableEdges } from './canvasBuilders'
 import type { HighlightFilters } from '@/lib/highlight'
 import { THEMES } from '@/lib/themes'
 import type { ElementStyle, Workspace, Container, SoftwareSystem, Person, Component, TableDef, ModelElement } from '@/types/model'
@@ -231,5 +231,201 @@ describe('buildParentMap with tableData', () => {
     // Non-DB containers still map to their system, no component children
     expect(map.get('svc1')).toBe('sys1')
     expect(map.size).toBe(1) // container→system, no components
+  })
+})
+
+// ─── resolveTableFKs ──────────────────────────────────────────────────
+
+describe('resolveTableFKs', () => {
+  it('returns empty array for empty table list', () => {
+    expect(resolveTableFKs([])).toEqual([])
+  })
+
+  it('returns empty when no columns have isForeignKey', () => {
+    const tables: TableDef[] = [
+      { id: 't1', name: 'orders', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
+      { id: 't2', name: 'items', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
+    ]
+    expect(resolveTableFKs(tables)).toEqual([])
+  })
+
+  it('matches customer_id FK to customers.id PK via naming convention', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    const pairs = resolveTableFKs(tables)
+    expect(pairs).toHaveLength(1)
+    expect(pairs[0]).toEqual({
+      sourceTableId: 't2',
+      sourceColumnId: expect.any(String),
+      targetTableId: 't1',
+      targetColumnId: expect.any(String),
+    })
+  })
+
+  it('matches user_id FK to users.id PK (handles irregular plural)', () => {
+    const tables: TableDef[] = [
+      {
+        id: 'u1', name: 'users', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 'p1', name: 'posts', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { name: 'user_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    const pairs = resolveTableFKs(tables)
+    expect(pairs).toHaveLength(1)
+    expect(pairs[0].sourceTableId).toBe('p1')
+    expect(pairs[0].targetTableId).toBe('u1')
+  })
+
+  it('returns empty when no PK exists on matching target table', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int' }, // not PK
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    expect(resolveTableFKs(tables)).toEqual([])
+  })
+
+  it('resolves multiple FK columns in one table', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'orders', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'products', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't3', name: 'order_items', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { name: 'order_id', type: 'int', isForeignKey: true },
+          { name: 'product_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    const pairs = resolveTableFKs(tables)
+    expect(pairs).toHaveLength(2)
+    const sourceIds = pairs.map(p => p.sourceTableId)
+    expect([...new Set(sourceIds)]).toEqual(['t3'])
+  })
+
+  it('does not match FK when target table name has no PK column named "id"', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'customer_pk', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    // customer_id → customers.{id}? No — customers has customer_pk, not id
+    // So the naming convention doesn't match. Should be empty.
+    const pairs = resolveTableFKs(tables)
+    // customer_id can't match customers.customer_pk via naming convention
+    expect(pairs).toEqual([])
+  })
+})
+
+// ─── buildTableEdges ───────────────────────────────────────────────────
+
+describe('buildTableEdges', () => {
+  it('returns empty array when no FK relationships exist', () => {
+    const tables: TableDef[] = [
+      { id: 't1', name: 'customers', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
+      { id: 't2', name: 'orders', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
+    ]
+    expect(buildTableEdges('db1', tables)).toEqual([])
+  })
+
+  it('builds React Flow edge with correct source/target node ids', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { id: 'col1', name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables)
+    expect(edges).toHaveLength(1)
+    const edge = edges[0]
+    expect(edge.source).toBe('__table__db1__t2')
+    expect(edge.target).toBe('__table__db1__t1')
+    expect(edge.type).toBe('fkEdge')
+    expect(edge.style).toBeDefined()
+  })
+
+  it('applies thin dashed style distinct from model edges', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables)
+    expect(edges[0].style).toMatchObject({
+      stroke: expect.any(String),
+      strokeDasharray: expect.any(String),
+      strokeWidth: expect.any(Number),
+    })
+  })
+
+  it('labels edge with FK column name', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables)
+    expect(edges[0].data).toMatchObject({ label: 'customer_id' })
   })
 })

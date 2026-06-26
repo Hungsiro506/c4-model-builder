@@ -32,10 +32,12 @@ import {
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
+import FkEdge from './edges/FkEdge'
 import {
   buildNodes,
   buildEdges,
   buildCompositeEdges,
+  buildTableEdges,
   buildGroupNodes,
   buildBoundaryNodes,
   buildDrillableSet,
@@ -56,6 +58,7 @@ import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
+  fkEdge: FkEdge,
 }
 
 const KBD_STYLE: React.CSSProperties = {
@@ -553,9 +556,19 @@ export default function Canvas() {
     // 5. Build final edges using post-layout positions for handle routing.
     //    When anything is expanded, re-target relationships onto nearest visible
     //    ancestors (bundling fan-in to collapsed siblings).
-    const edges = expandedElementIds.length > 0
+    const modelEdges = expandedElementIds.length > 0
       ? buildCompositeEdges(workspace, allNodes, highlightFilters, tableData)
       : buildEdges(workspace, view, allNodes, highlightFilters)
+
+    // 5b. FK edges between table nodes inside expanded Database containers.
+    let fkEdges: Edge[] = []
+    for (const cid of expandedElementIds) {
+      const tables = tableData[cid]
+      if (tables && tables.length > 1) {
+        fkEdges = fkEdges.concat(buildTableEdges(cid, tables))
+      }
+    }
+    const edges = [...modelEdges, ...fkEdges]
 
     return { initialNodes: allNodes, initialEdges: edges }
   }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableData])
