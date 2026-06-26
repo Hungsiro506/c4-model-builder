@@ -403,9 +403,9 @@ describe('tables in extractSidecar / applySidecar', () => {
     }
     const result = extractSidecar(ws, tableData)
     const cols = result!.tables!['db-1'][0].columns
-    expect(cols[0]).toEqual({ name: 'id', type: 'int', isPrimaryKey: true })
-    expect(cols[1]).toEqual({ name: 'customer_id', type: 'int', isForeignKey: true })
-    expect(cols[2]).toEqual({ name: 'notes', type: 'text', description: 'order notes' })
+    expect(cols[0]).toMatchObject({ name: 'id', type: 'int', isPrimaryKey: true })
+    expect(cols[1]).toMatchObject({ name: 'customer_id', type: 'int', isForeignKey: true })
+    expect(cols[2]).toMatchObject({ name: 'notes', type: 'text', description: 'order notes' })
   })
 
   it('extractSidecar serializes table description', () => {

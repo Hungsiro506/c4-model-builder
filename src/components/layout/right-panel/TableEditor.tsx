@@ -237,7 +237,7 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                     className="text-xxs rounded px-1 py-0.5"
                     style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }}
                   >
-                    <option value="">Any PK col</option>
+                    <option value="">Select column...</option>
                     {targetColumns.map(c => (
                       <option key={c.id ?? c.name} value={c.id ?? c.name}>
                         {c.name} {c.isPrimaryKey ? '(PK)' : ''}

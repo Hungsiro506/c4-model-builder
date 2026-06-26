@@ -47,6 +47,7 @@ interface SidecarView {
 }
 
 interface SidecarTableColumn {
+  id?: string
   name: string
   type: string
   isPrimaryKey?: boolean
@@ -128,6 +129,7 @@ function isSidecarFkEdge(value: unknown): value is SidecarFkEdge {
 function isSidecarTableColumn(value: unknown): value is SidecarTableColumn {
   if (!isRecord(value)) return false
   if (typeof value.name !== 'string' || typeof value.type !== 'string') return false
+  if ('id' in value && value.id !== undefined && typeof value.id !== 'string') return false
   if ('isPrimaryKey' in value && value.isPrimaryKey !== undefined && typeof value.isPrimaryKey !== 'boolean') return false
   if ('isForeignKey' in value && value.isForeignKey !== undefined && typeof value.isForeignKey !== 'boolean') return false
   if ('description' in value && value.description !== undefined && typeof value.description !== 'string') return false
@@ -213,6 +215,7 @@ export function extractSidecar(
           name: t.name,
           description: t.description,
           columns: t.columns.map(c => ({
+            id: c.id ?? c.name,
             name: c.name,
             type: c.type,
             ...(c.isPrimaryKey !== undefined ? { isPrimaryKey: c.isPrimaryKey } : {}),
@@ -340,6 +343,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): {
         name: t.name,
         description: t.description,
         columns: t.columns.map(c => ({
+          id: c.id ?? c.name,
           name: c.name,
           type: c.type,
           isPrimaryKey: c.isPrimaryKey,

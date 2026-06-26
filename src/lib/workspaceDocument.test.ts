@@ -67,7 +67,7 @@ describe('parseWorkspaceDocument', () => {
     })
 
     expect(workspace.model.people[0].id).toBe('user')
-    expect(tableData).toEqual({
+    expect(tableData).toMatchObject({
       'db-1': [
         { id: 't1', name: 'users', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
       ],
