@@ -4586,5 +4586,27 @@ describe('table slice', () => {
       expect(updated).toBeDefined()
       expect(updated!.targetTableId).toBe(t3.id)
     })
+
+    it('FK edge is findable by sourceColumnId after addFkEdge (dropdown display)', () => {
+      const cid = useWorkspaceStore.getState().addContainer('test-d', 'DB Dropdown')
+      const customers = useWorkspaceStore.getState().addTable(cid, 'customers')
+      const orders = useWorkspaceStore.getState().addTable(cid, 'orders')
+      // Add PK + FK columns
+      useWorkspaceStore.getState().addColumn(cid, customers.id, 'id', 'int')
+      const fkCol = useWorkspaceStore.getState().addColumn(cid, orders.id, 'customer_id', 'int')
+      useWorkspaceStore.getState().updateColumn(cid, orders.id, fkCol.id, { isForeignKey: true })
+
+      // Simulate dropdown selection: user picks "customers" as target
+      const colId = fkCol.id
+      useWorkspaceStore.getState().addFkEdge(cid, orders.id, customers.id, colId)
+
+      // Now read back — this is what TableEditor does to set dropdown value
+      const state = useWorkspaceStore.getState()
+      const fkEdge = state.fkEdges[cid]?.find(
+        e => e.sourceTableId === orders.id && e.sourceColumnId === colId,
+      )
+      expect(fkEdge).toBeDefined()
+      expect(fkEdge!.targetTableId).toBe(customers.id)
+    })
   })
 })
