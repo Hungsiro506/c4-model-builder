@@ -152,12 +152,7 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                 onClick={() => {
                   const newVal = !col.isForeignKey
                   updateColumn(containerId, tableId, colId as string, { isForeignKey: newVal })
-                  if (newVal) {
-                    // Auto-create FK edge with first other table as target
-                    if (otherTables.length > 0) {
-                      addFkEdge(containerId, tableId, otherTables[0].id)
-                    }
-                  } else {
+                  if (!newVal) {
                     // Remove FK edges referencing this column
                     const colEdges = fkEdges.filter(
                       e => e.sourceTableId === tableId && e.sourceColumnId === colId,
@@ -218,7 +213,7 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                     if (fkEdge) {
                       updateFkEdge(containerId, fkEdge.id, { targetTableId: newTgt, targetColumnId: undefined })
                     } else {
-                      addFkEdge(containerId, tableId, newTgt)
+                      addFkEdge(containerId, tableId, newTgt, colId)
                     }
                   }}
                   className="text-xxs rounded px-1 py-0.5"

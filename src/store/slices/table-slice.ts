@@ -163,7 +163,7 @@ export const createTableSlice: StateCreator<
 
   // ─── FK Edge CRUD ─────────────────────────────────────────────────
 
-  addFkEdge: (containerId, sourceTableId, targetTableId) => {
+  addFkEdge: (containerId, sourceTableId, targetTableId, sourceColumnId) => {
     const fkEdge: FkEdgeDef = {
       id: nanoid(),
       sourceTableId,
@@ -179,20 +179,16 @@ export const createTableSlice: StateCreator<
       )
       if (existing) return
 
-      // Auto-resolve sourceColumnId: first FK column in source table
+      // sourceColumnId: use explicit param, or auto-resolve to first FK column
       const sourceTables = s.tableData[containerId]
-      if (sourceTables) {
+      if (sourceColumnId) {
+        fkEdge.sourceColumnId = sourceColumnId
+      } else if (sourceTables) {
         const srcTable = sourceTables.find(t => t.id === sourceTableId)
         if (srcTable) {
-          const fkCol = srcTable.columns.find(c => c.isForeignKey)
-          if (fkCol) fkEdge.sourceColumnId = fkCol.id ?? fkCol.name
-          // Mark first non-PK column as FK if no FK column exists yet
-          if (!fkEdge.sourceColumnId) {
-            const firstNonPk = srcTable.columns.find(c => !c.isPrimaryKey)
-            if (firstNonPk) {
-              firstNonPk.isForeignKey = true
-              fkEdge.sourceColumnId = firstNonPk.id ?? firstNonPk.name
-            }
+          const fkCol = srcTable.columns.find(c => c.isForeignKey && 'id' in c)
+          if (fkCol && 'id' in fkCol) {
+            fkEdge.sourceColumnId = (fkCol as ColumnDef & { id: string }).id
           }
         }
       }
@@ -200,8 +196,10 @@ export const createTableSlice: StateCreator<
       if (sourceTables) {
         const tgtTable = sourceTables.find(t => t.id === targetTableId)
         if (tgtTable) {
-          const pkCol = tgtTable.columns.find(c => c.isPrimaryKey)
-          if (pkCol) fkEdge.targetColumnId = pkCol.id ?? pkCol.name
+          const pkCol = tgtTable.columns.find(c => c.isPrimaryKey && 'id' in c)
+          if (pkCol && 'id' in pkCol) {
+            fkEdge.targetColumnId = (pkCol as ColumnDef & { id: string }).id
+          }
         }
       }
 
