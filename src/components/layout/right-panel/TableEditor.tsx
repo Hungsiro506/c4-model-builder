@@ -208,6 +208,7 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                     const newTgt = e.target.value
                     if (!newTgt) {
                       if (fkEdge) deleteFkEdge(containerId, fkEdge.id)
+                      updateColumn(containerId, tableId, colId as string, { isForeignKey: false })
                       return
                     }
                     if (fkEdge) {

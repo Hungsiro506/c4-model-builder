@@ -360,6 +360,8 @@ describe('resolveTableFKs', () => {
 // ─── buildTableEdges ───────────────────────────────────────────────────
 
 describe('buildTableEdges', () => {
+  const manualEdge = { id: 'fe1', sourceTableId: 't2', targetTableId: 't1', sourceColumnId: 'col1' }
+
   it('returns empty array when no FK relationships exist', () => {
     const tables: TableDef[] = [
       { id: 't1', name: 'customers', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
@@ -368,7 +370,23 @@ describe('buildTableEdges', () => {
     expect(buildTableEdges('db1', tables)).toEqual([])
   })
 
-  const manualEdge = { id: 'fe1', sourceTableId: 't2', targetTableId: 't1', sourceColumnId: 'col1' }
+  it('skips FK edge when source table does not exist in tables list', () => {
+    const tables: TableDef[] = [
+      { id: 't1', name: 'customers', columns: [{ name: 'id', type: 'int', isPrimaryKey: true }] },
+      // 'orders' table (t2) is missing — was deleted
+    ]
+    const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges).toHaveLength(0)
+  })
+
+  it('skips FK edge when target table does not exist in tables list', () => {
+    const tables: TableDef[] = [
+      { id: 't2', name: 'orders', columns: [{ id: 'col1', name: 'customer_id', type: 'int' }] },
+      // 'customers' table (t1) is missing — was deleted
+    ]
+    const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges).toHaveLength(0)
+  })
 
   it('builds React Flow edge with correct source/target node ids', () => {
     const tables: TableDef[] = [

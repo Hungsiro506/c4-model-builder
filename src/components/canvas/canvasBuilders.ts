@@ -1144,8 +1144,11 @@ export function buildTableEdges(
   // Manual FK edges (only — auto-resolution disabled)
   for (const fk of manualFkEdges ?? []) {
     const sourceTable = tables.find(t => t.id === fk.sourceTableId)
+    if (!sourceTable) continue // orphan: source table deleted
+    const targetTable = tables.find(t => t.id === fk.targetTableId)
+    if (!targetTable) continue // orphan: target table deleted
     const sourceCol = fk.sourceColumnId
-      ? sourceTable?.columns.find(c => (c.id ?? c.name) === fk.sourceColumnId)
+      ? sourceTable.columns.find(c => (c.id ?? c.name) === fk.sourceColumnId)
       : undefined
 
     edges.push({
