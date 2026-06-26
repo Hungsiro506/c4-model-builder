@@ -203,6 +203,7 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
               <div className="flex items-center gap-1 px-3 pb-1" style={{ paddingLeft: 54 }}>
                 <span className="text-xxs" style={{ color: 'var(--color-text-muted)' }}>→</span>
                 <select
+                  key={`fk-tgt-${colId}-${targetTableId || 'none'}`}
                   value={targetTableId}
                   onChange={(e) => {
                     const newTgt = e.target.value
@@ -227,6 +228,7 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                 </select>
                 {!!targetTableId && (
                   <select
+                    key={`fk-col-${colId}-${fkEdge?.targetColumnId || 'any'}`}
                     value={fkEdge?.targetColumnId ?? ''}
                     onChange={(e) => {
                       const newCol = e.target.value || undefined
