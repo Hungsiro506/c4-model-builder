@@ -4523,4 +4523,27 @@ describe('table slice', () => {
       expect(useWorkspaceStore.getState().mermaidText['db-1']).toBe('')
     })
   })
+
+  describe('selectedTable', () => {
+    it('starts as null', () => {
+      expect(useWorkspaceStore.getState().selectedTable).toBeNull()
+    })
+
+    it('selectTable sets the selected table', () => {
+      useWorkspaceStore.getState().selectTable('db-1', 't1')
+      expect(useWorkspaceStore.getState().selectedTable).toEqual({ containerId: 'db-1', tableId: 't1' })
+    })
+
+    it('clearTableSelection resets to null', () => {
+      useWorkspaceStore.getState().selectTable('db-1', 't1')
+      useWorkspaceStore.getState().clearTableSelection()
+      expect(useWorkspaceStore.getState().selectedTable).toBeNull()
+    })
+
+    it('selectTable replaces previous selection', () => {
+      useWorkspaceStore.getState().selectTable('db-1', 't1')
+      useWorkspaceStore.getState().selectTable('db-2', 't2')
+      expect(useWorkspaceStore.getState().selectedTable).toEqual({ containerId: 'db-2', tableId: 't2' })
+    })
+  })
 })

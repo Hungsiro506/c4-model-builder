@@ -10,6 +10,7 @@ import { isReservedTag } from '@/store/builtin-tags'
 import { normalizeSafeExternalUrl } from '@/lib/safeUrl'
 import { FieldLabel, EditableField, TechnologyField, OwnerField } from './right-panel/fields'
 import GroupProperties from './right-panel/GroupProperties'
+import TableEditor from './right-panel/TableEditor'
 
 const STATUS_OPTIONS: { value: ElementStatus | undefined; label: string; color: string | null }[] = [
   { value: undefined, label: 'Not set', color: null },
@@ -99,13 +100,20 @@ export default function RightPanel() {
   const selectedIds = useWorkspaceStore((s) => s.selectedElementIds)
   const selectedRelId = useWorkspaceStore((s) => s.selectedRelationshipId)
   const selectedGroupId = useWorkspaceStore((s) => s.selectedGroupId)
+  const selectedTable = useWorkspaceStore((s) => s.selectedTable)
   const clearSelection = useWorkspaceStore((s) => s.clearSelection)
+  const clearTableSelection = useWorkspaceStore((s) => s.clearTableSelection)
 
   if (!workspace) return null
 
   const element = getSelectedElement(workspace, selectedIds)
   const relationship = selectedRelId ? getRelationshipById(workspace, selectedRelId) : undefined
   const group = selectedGroupId ? workspace.model.groups.find(g => g.id === selectedGroupId) : undefined
+
+  // Table editor takes precedence when a table node is selected on canvas
+  if (selectedTable) {
+    return <TableEditor containerId={selectedTable.containerId} tableId={selectedTable.tableId} onClose={clearTableSelection} />
+  }
 
   return (
     <div className="glass-panel-solid flex h-full w-full flex-col overflow-hidden rounded-xl border shadow-lg shadow-black/20">

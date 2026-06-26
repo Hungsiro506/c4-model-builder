@@ -10,6 +10,7 @@ interface BoundaryNodeData {
   empty?: boolean
   collapsible?: boolean
   elementId?: string
+  isDatabase?: boolean
 }
 
 function renderBoundary(data: BoundaryNodeData) {
@@ -91,6 +92,23 @@ describe('BoundaryNode "+" dropdown', () => {
     expect(screen.getByRole('button', { name: /new component in my container/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /new database/i })).toBeFalsy()
     expect(screen.queryByRole('button', { name: /new container/i })).toBeFalsy()
+  })
+
+  it('shows "Table" in dropdown for Database container boundary', async () => {
+    renderBoundary({
+      name: 'My Database',
+      typeLabel: 'Container',
+      collapsible: true,
+      elementId: 'db1',
+      isDatabase: true,
+    })
+    const btn = screen.getByRole('button', { name: /add table to my database/i })
+    await userEvent.click(btn)
+
+    // DB container dropdown shows "Table" only
+    expect(screen.getByRole('button', { name: /new table in my database/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /new component/i })).toBeFalsy()
+    expect(screen.queryByRole('button', { name: /new database/i })).toBeFalsy()
   })
 
   it('clicking outside the dropdown closes it', async () => {

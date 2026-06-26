@@ -1,0 +1,189 @@
+import { memo, useCallback } from 'react'
+import { type NodeProps } from '@xyflow/react'
+import type { TableDef, ElementStyle } from '@/types/model'
+import { useWorkspaceStore } from '@/store/workspace'
+import { Key, ArrowRightLeft } from 'lucide-react'
+
+export interface TableNodeData {
+  tableDef: TableDef
+  containerId: string
+  /** Inherited style from parent Database container's tag cascade. */
+  style?: ElementStyle
+}
+
+/**
+ * Table node renders a database table with its columns inside an expanded
+ * Database container boundary. Tables are sidecar-only metadata — they are
+ * NOT ModelElements and do not use BaseC4Node.
+ */
+function TableNode({ data }: NodeProps & { data: TableNodeData }) {
+  const { tableDef, style } = data
+  const selectTable = useWorkspaceStore((s) => s.selectTable)
+  const selectedTable = useWorkspaceStore((s) => s.selectedTable)
+
+  const isSelected = selectedTable?.containerId === data.containerId
+    && selectedTable?.tableId === tableDef.id
+
+  const accent = style?.color ?? 'var(--color-type-container)'
+  const tint = style?.background
+    ? `${style.background}1a` // ~10% opacity
+    : 'var(--color-tint-container)'
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation() // prevent React Flow from intercepting the click
+    selectTable(data.containerId, tableDef.id)
+  }, [selectTable, data.containerId, tableDef.id])
+
+  return (
+    <div
+      className={`c4-node ${isSelected ? 'selected' : ''}`}
+      role="button"
+      tabIndex={0}
+      style={{
+        borderColor: isSelected ? 'var(--color-type-container)' : 'var(--color-border)',
+        background: isSelected ? 'var(--color-tint-container)' : 'var(--color-surface-1)',
+        minWidth: 200,
+        maxWidth: 280,
+        padding: 0,
+        cursor: 'pointer',
+        '--node-glow': 'var(--color-type-container)',
+      } as React.CSSProperties}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          handleClick(e as unknown as React.MouseEvent)
+        }
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '8px 12px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          fontWeight: 600,
+          fontSize: 12,
+          color: 'var(--color-text-primary)',
+          background: tint,
+          borderRadius: '10px 10px 0 0',
+        }}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={accent}
+          strokeWidth="2"
+          style={{ flexShrink: 0 }}
+        >
+          <rect x="2" y="2" width="20" height="20" rx="2" />
+          <line x1="2" y1="8" x2="22" y2="8" />
+          <line x1="8" y1="2" x2="8" y2="22" />
+        </svg>
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {tableDef.name || 'Untitled'}
+        </span>
+      </div>
+
+      {/* Columns */}
+      <div style={{ padding: '1px 0' }}>
+        {tableDef.columns.length === 0 ? (
+          <div
+            style={{
+              padding: '8px 12px',
+              fontSize: 11,
+              color: 'var(--color-text-muted)',
+              fontStyle: 'italic',
+            }}
+          >
+            (no columns)
+          </div>
+        ) : (
+          tableDef.columns.map((col, i) => {
+            const key = 'id' in col ? (col as { id: string }).id : `col-${i}`
+            return (
+            <div
+              key={key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '1px 12px',
+                fontSize: 11,
+                lineHeight: 1.7,
+              }}
+            >
+              {/* PK indicator */}
+              <span
+                style={{
+                  width: 16,
+                  flexShrink: 0,
+                  textAlign: 'center',
+                  color: col.isPrimaryKey ? 'var(--color-type-person)' : 'transparent',
+                  fontSize: 10,
+                }}
+                title={col.isPrimaryKey ? 'Primary Key' : undefined}
+              >
+                {col.isPrimaryKey && <Key size={10} style={{ display: 'inline' }} />}
+              </span>
+              {/* FK indicator */}
+              <span
+                style={{
+                  width: 16,
+                  flexShrink: 0,
+                  textAlign: 'center',
+                  color: col.isForeignKey ? '#4ade80' : 'transparent',
+                  fontSize: 10,
+                }}
+                title={col.isForeignKey ? 'Foreign Key' : undefined}
+              >
+                {col.isForeignKey && <ArrowRightLeft size={10} style={{ display: 'inline' }} />}
+              </span>
+              {/* Column name */}
+              <span
+                style={{
+                  flex: 1,
+                  fontWeight: 500,
+                  color: 'var(--color-text-primary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {col.name || (
+                  <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                    col_{i + 1}
+                  </span>
+                )}
+              </span>
+              {/* Type */}
+              <span
+                style={{
+                  color: 'var(--color-text-muted)',
+                  fontSize: 10,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {col.type}
+              </span>
+            </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default memo(TableNode)
