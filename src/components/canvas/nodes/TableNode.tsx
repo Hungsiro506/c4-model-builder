@@ -37,15 +37,24 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
   return (
     <div
       className={`c4-node ${isSelected ? 'selected' : ''}`}
+      role="button"
+      tabIndex={0}
       style={{
         borderColor: isSelected ? 'var(--color-type-container)' : 'var(--color-border)',
         background: isSelected ? 'var(--color-tint-container)' : 'var(--color-surface-1)',
         minWidth: 200,
         maxWidth: 280,
         padding: 0,
+        cursor: 'pointer',
         '--node-glow': 'var(--color-type-container)',
       } as React.CSSProperties}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          handleClick(e as unknown as React.MouseEvent)
+        }
+      }}
     >
       {/* Header */}
       <div
@@ -100,9 +109,11 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
             (no columns)
           </div>
         ) : (
-          tableDef.columns.map((col, i) => (
+          tableDef.columns.map((col, i) => {
+            const key = 'id' in col ? (col as { id: string }).id : `col-${i}`
+            return (
             <div
-              key={i}
+              key={key}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -167,7 +178,8 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
                 {col.type}
               </span>
             </div>
-          ))
+            )
+          })
         )}
       </div>
     </div>

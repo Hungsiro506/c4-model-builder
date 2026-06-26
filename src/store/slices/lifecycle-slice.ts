@@ -56,6 +56,7 @@ export const createLifecycleSlice: StateCreator<
       // Reset table data
       tableData: tableData ?? {},
       mermaidText: {},
+      selectedTable: null,
     })
   },
 
@@ -78,6 +79,7 @@ export const createLifecycleSlice: StateCreator<
       scopeViolations: [],
       tableData: {},
       mermaidText: {},
+      selectedTable: null,
     }),
 
   updateWorkspaceMeta: (patch) => set((s) => {

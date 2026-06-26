@@ -117,6 +117,11 @@ function getExpandBoundaryMemberIds(
       for (const c of sys.containers) {
         ids.add(c.id)
         for (const comp of c.components) ids.add(comp.id)
+        // Table children for Database containers inside the system
+        if (tableData && isDatabaseContainer(c)) {
+          const tables = tableData[c.id] ?? []
+          for (const t of tables) ids.add(tableNodeId(c.id, t.id))
+        }
       }
       return ids
     }
@@ -1250,6 +1255,7 @@ export default function Canvas() {
   const onPaneClick = useCallback(() => {
     if (inspectorTimer.current) { clearTimeout(inspectorTimer.current); inspectorTimer.current = null }
     clearSelection()
+    useWorkspaceStore.getState().clearTableSelection()
     useWorkspaceStore.getState().setEditingRelationship(null)
   }, [clearSelection])
 

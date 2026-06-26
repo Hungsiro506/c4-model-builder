@@ -21,6 +21,7 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const addContainer = useWorkspaceStore((s) => s.addContainer)
   const addComponent = useWorkspaceStore((s) => s.addComponent)
   const addTable = useWorkspaceStore((s) => s.addTable)
+  const selectTable = useWorkspaceStore((s) => s.selectTable)
   const isSystem = data.typeLabel === 'Software System'
   const isDatabase = data.isDatabase === true
 
@@ -71,7 +72,10 @@ function BoundaryNode({ data, selected }: NodeProps & { data: BoundaryNodeData }
   const doAddTable = () => {
     if (!data.elementId) return
     // Database containers: add a table to tableData (sidecar), not model
-    addTable(data.elementId, 'new_table')
+    const table = addTable(data.elementId, 'new_table')
+    if (table?.id) {
+      selectTable(data.elementId, table.id)
+    }
     setDropdownOpen(false)
   }
 
