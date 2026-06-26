@@ -44,6 +44,8 @@ export interface Component extends BaseElement {
 // ─── Database Tables (sidecar-only, never serialized to DSL) ──────────
 
 export interface ColumnDef {
+  /** Stable id assigned on parse or creation. Required for CRUD operations. */
+  id?: string
   name: string
   type: string
   isPrimaryKey?: boolean

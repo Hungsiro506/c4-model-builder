@@ -113,6 +113,7 @@ export function parseMermaidERD(input: string): ParsedMermaidERD {
       if (colMatch) {
         const [, type, name, pk, fk, description] = colMatch
         const col: ColumnDef = {
+          id: nanoid(),
           name,
           type,
           isPrimaryKey: pk === 'PK' ? true : undefined,

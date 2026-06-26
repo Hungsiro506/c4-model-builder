@@ -17,20 +17,24 @@ describe('parseMermaidERD', () => {
     expect(result.tables).toHaveLength(1)
     expect(result.tables[0].name).toBe('CUSTOMER')
     expect(result.tables[0].columns).toHaveLength(3)
-    expect(result.tables[0].columns[0]).toEqual({
+    expect(result.tables[0].columns[0]).toMatchObject({
       name: 'id',
       type: 'int',
       isPrimaryKey: true,
     })
-    expect(result.tables[0].columns[1]).toEqual({
+    expect(result.tables[0].columns[1]).toMatchObject({
       name: 'name',
       type: 'string',
     })
-    expect(result.tables[0].columns[2]).toEqual({
+    expect(result.tables[0].columns[2]).toMatchObject({
       name: 'email',
       type: 'string',
       description: 'contact email',
     })
+    // All parsed columns receive a stable id
+    for (const col of result.tables[0].columns) {
+      expect(col.id).toBeTruthy()
+    }
   })
 
   it('parses a column with FK flag', () => {
