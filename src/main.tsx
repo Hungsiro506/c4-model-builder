@@ -82,15 +82,8 @@ if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__testAddTable = (containerId: string, name: string) => {
     return useWorkspaceStore.getState().addTable(containerId, name)
   }
-  ;(window as unknown as Record<string, unknown>).__testAddColumn = (containerId: string, tableId: string, name: string, type: string, isPrimaryKey?: boolean, isForeignKey?: boolean) => {
-    const col = useWorkspaceStore.getState().addColumn(containerId, tableId, name, type)
-    if (isPrimaryKey || isForeignKey) {
-      const patch: Record<string, boolean> = {}
-      if (isPrimaryKey) patch.isPrimaryKey = true
-      if (isForeignKey) patch.isForeignKey = true
-      useWorkspaceStore.getState().updateColumn(containerId, tableId, col.id, patch)
-    }
-    return col
+  ;(window as unknown as Record<string, unknown>).__testAddColumn = (containerId: string, tableId: string, name: string, type: string) => {
+    return useWorkspaceStore.getState().addColumn(containerId, tableId, name, type)
   }
   ;(window as unknown as Record<string, unknown>).__testAddFkEdge = (containerId: string, sourceTableId: string, targetTableId: string, sourceColumnId?: string) => {
     return useWorkspaceStore.getState().addFkEdge(containerId, sourceTableId, targetTableId, sourceColumnId)

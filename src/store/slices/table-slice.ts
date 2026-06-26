@@ -62,13 +62,6 @@ export const createTableSlice: StateCreator<
       const tables = s.tableData[containerId]
       if (!tables) return
       s.tableData[containerId] = tables.filter(t => t.id !== tableId)
-      // Cascade: remove FK edges referencing the deleted table
-      const edges = s.fkEdges[containerId]
-      if (edges) {
-        s.fkEdges[containerId] = edges.filter(
-          e => e.sourceTableId !== tableId && e.targetTableId !== tableId,
-        )
-      }
     })
   },
 
