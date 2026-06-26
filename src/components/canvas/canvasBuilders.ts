@@ -7,7 +7,7 @@ import {
   groupSpansBoundaryClusters,
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
-import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship, TableDef } from '@/types/model'
+import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship, TableDef, FkEdgeDef } from '@/types/model'
 import type { TableNodeData } from './nodes/TableNode'
 import { EMPTY_EXPAND_W, EMPTY_EXPAND_H } from '@/lib/expandComposite'
 import { CHANGESTATE_ELEMENT_STYLES, CHANGESTATE_RELATIONSHIP_STYLES } from '@/lib/changeState'
@@ -1130,16 +1130,31 @@ export function resolveTableFKs(tables: TableDef[]): FKEdgePair[] {
   return pairs
 }
 
-/** Build React Flow edges between table nodes for FK relationships. */
+/** Build React Flow edges between table nodes for FK relationships.
+ *  Merges auto-resolved edges (naming convention) with manual FK edges.
+ *  Manual edges take priority — if both produce the same source→target, the
+ *  auto edge is dropped. */
 export function buildTableEdges(
   containerId: string,
   tables: TableDef[],
+  manualFkEdges?: FkEdgeDef[],
 ): Edge[] {
-  const pairs = resolveTableFKs(tables)
-  if (pairs.length === 0) return []
-
   const edges: Edge[] = []
-  for (const pair of pairs) {
+
+  // Auto-resolved FK edges from naming convention
+  const autoPairs = resolveTableFKs(tables)
+
+  // Build dedup set from manual edges (sourceTableId->targetTableId)
+  const manualDedup = new Set(
+    (manualFkEdges ?? []).map(e => `${e.sourceTableId}->${e.targetTableId}`),
+  )
+
+  // Filter auto pairs: drop any that overlap with manual edges
+  const filteredAutoPairs = autoPairs.filter(
+    p => !manualDedup.has(`${p.sourceTableId}->${p.targetTableId}`),
+  )
+
+  for (const pair of filteredAutoPairs) {
     const sourceTable = tables.find(t => t.id === pair.sourceTableId)
     const sourceCol = sourceTable?.columns.find(c => (c.id ?? c.name) === pair.sourceColumnId)
 
@@ -1160,7 +1175,35 @@ export function buildTableEdges(
       },
       selectable: false,
       focusable: false,
-      zIndex: 3, // above boundary overlays but below table nodes (5)
+      zIndex: 3,
+    })
+  }
+
+  // Manual FK edges
+  for (const fk of manualFkEdges ?? []) {
+    const sourceTable = tables.find(t => t.id === fk.sourceTableId)
+    const sourceCol = fk.sourceColumnId
+      ? sourceTable?.columns.find(c => (c.id ?? c.name) === fk.sourceColumnId)
+      : undefined
+
+    edges.push({
+      id: `__fk_manual__${containerId}__${fk.id}`,
+      source: tableNodeId(containerId, fk.sourceTableId),
+      target: tableNodeId(containerId, fk.targetTableId),
+      type: 'fkEdge',
+      data: {
+        label: sourceCol?.name ?? '',
+        sourceColumnId: fk.sourceColumnId,
+        targetColumnId: fk.targetColumnId,
+      },
+      style: {
+        stroke: 'var(--color-fk-edge, #6366f1)',
+        strokeDasharray: '6 3',
+        strokeWidth: 1.5,
+      },
+      selectable: false,
+      focusable: false,
+      zIndex: 3,
     })
   }
 

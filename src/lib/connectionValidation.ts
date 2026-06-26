@@ -18,6 +18,23 @@ export function elementLevel(type: string): number {
   }
 }
 
+/** Check if a node ID is a synthetic table node inside an expanded Database container. */
+export function isTableNodeId(nodeId: string): boolean {
+  return nodeId.startsWith('__table__')
+}
+
+/** Parse a synthetic table node ID into container + table IDs.
+ *  Format: `__table__<containerId>__<tableId>` */
+export function parseTableNodeId(nodeId: string): { containerId: string; tableId: string } | null {
+  const withoutPrefix = nodeId.slice('__table__'.length)
+  const sepIdx = withoutPrefix.indexOf('__')
+  if (sepIdx === -1) return null
+  return {
+    containerId: withoutPrefix.slice(0, sepIdx),
+    tableId: withoutPrefix.slice(sepIdx + 2),
+  }
+}
+
 /** A React Flow node id may be an expand-boundary wrapper (`__expand_boundary__<id>`).
  *  Strip the prefix to recover the underlying model element id. */
 function modelIdOf(nodeId: string): string {
@@ -32,6 +49,10 @@ function modelIdOf(nodeId: string): string {
  * cross-level connections (e.g. a container shown via expand-in-place dragged
  * to a top-level system) cleanly, instead of letting an unroutable edge
  * scramble the layout.
+ *
+ * Table-to-table connections (both node IDs begin with `__table__`) are allowed
+ * only within the same Database container. Mixed table↔C4-element connections
+ * are blocked.
  */
 export function canConnectElements(
   workspace: Workspace | null | undefined,
@@ -39,6 +60,21 @@ export function canConnectElements(
   targetNodeId: string | null | undefined,
 ): boolean {
   if (!workspace || !sourceNodeId || !targetNodeId) return false
+
+  // Table-to-table connections: only within the same container
+  const srcIsTable = isTableNodeId(sourceNodeId)
+  const tgtIsTable = isTableNodeId(targetNodeId)
+  if (srcIsTable || tgtIsTable) {
+    if (!srcIsTable || !tgtIsTable) return false // mixed table↔C4 blocked
+    const src = parseTableNodeId(sourceNodeId)
+    const tgt = parseTableNodeId(targetNodeId)
+    if (!src || !tgt) return false
+    if (src.containerId !== tgt.containerId) return false // cross-container blocked
+    if (src.tableId === tgt.tableId) return false // self-connection
+    return true
+  }
+
+  // Existing C4 element connection logic
   const sourceId = modelIdOf(sourceNodeId)
   const targetId = modelIdOf(targetNodeId)
   if (sourceId === targetId) return false

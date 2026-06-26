@@ -14,14 +14,18 @@ interface TableEditorProps {
 
 export default function TableEditor({ containerId, tableId, onClose }: TableEditorProps) {
   const tableData = useWorkspaceStore((s) => s.tableData[containerId]) ?? EMPTY_TABLE_LIST
+  const fkEdges = useWorkspaceStore((s) => s.fkEdges[containerId]) ?? []
   const updateTable = useWorkspaceStore((s) => s.updateTable)
   const deleteTable = useWorkspaceStore((s) => s.deleteTable)
   const addColumn = useWorkspaceStore((s) => s.addColumn)
   const updateColumn = useWorkspaceStore((s) => s.updateColumn)
   const deleteColumn = useWorkspaceStore((s) => s.deleteColumn)
-  // Each column now stores an id. We find it by index when updating.
+  const addFkEdge = useWorkspaceStore((s) => s.addFkEdge)
+  const updateFkEdge = useWorkspaceStore((s) => s.updateFkEdge)
+  const deleteFkEdge = useWorkspaceStore((s) => s.deleteFkEdge)
 
   const table = tableData.find((t) => t.id === tableId)
+  const otherTables = tableData.filter((t: { id: string }) => t.id !== tableId)
   const [newColName, setNewColName] = useState('')
   const [newColType, setNewColType] = useState('varchar')
 
@@ -119,7 +123,17 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
 
         {table.columns.map((col, i) => {
           const colId = 'id' in col ? (col as { id: string }).id : `${i}`
+          // FK target data (computed outside JSX to avoid IIFE parse errors)
+          const fkEdge = fkEdges.find(
+            e => e.sourceTableId === tableId && e.sourceColumnId === colId,
+          )
+          const targetTableId = fkEdge?.targetTableId ?? ''
+          const targetTable = targetTableId
+            ? tableData.find((t: { id: string }) => t.id === targetTableId)
+            : undefined
+          const targetColumns = (targetTable as { columns: typeof table.columns } | undefined)?.columns ?? []
           return (
+            <>
             <div key={colId} className="flex items-center gap-1.5 px-3 py-1 hover:bg-white/[0.03]">
               {/* PK toggle */}
               <button
@@ -135,7 +149,22 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
 
               {/* FK toggle */}
               <button
-                onClick={() => updateColumn(containerId, tableId, colId as string, { isForeignKey: !col.isForeignKey })}
+                onClick={() => {
+                  const newVal = !col.isForeignKey
+                  updateColumn(containerId, tableId, colId as string, { isForeignKey: newVal })
+                  if (newVal) {
+                    // Auto-create FK edge with first other table as target
+                    if (otherTables.length > 0) {
+                      addFkEdge(containerId, tableId, otherTables[0].id)
+                    }
+                  } else {
+                    // Remove FK edges referencing this column
+                    const colEdges = fkEdges.filter(
+                      e => e.sourceTableId === tableId && e.sourceColumnId === colId,
+                    )
+                    for (const e of colEdges) deleteFkEdge(containerId, e.id)
+                  }
+                }}
                 className={`w-5 h-5 rounded flex items-center justify-center text-xxs ${
                   col.isForeignKey ? 'text-indigo-400 bg-indigo-400/10' : 'text-muted hover:bg-white/5'
                 }`}
@@ -174,6 +203,55 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                 <Trash2 size={11} />
               </button>
             </div>
+            {/* FK target picker */}
+            {col.isForeignKey && (
+              <div className="flex items-center gap-1 px-3 pb-1" style={{ paddingLeft: 54 }}>
+                <span className="text-xxs" style={{ color: 'var(--color-text-muted)' }}>→</span>
+                <select
+                  value={targetTableId}
+                  onChange={(e) => {
+                    const newTgt = e.target.value
+                    if (!newTgt) {
+                      if (fkEdge) deleteFkEdge(containerId, fkEdge.id)
+                      return
+                    }
+                    if (fkEdge) {
+                      updateFkEdge(containerId, fkEdge.id, { targetTableId: newTgt, targetColumnId: undefined })
+                    } else {
+                      addFkEdge(containerId, tableId, newTgt)
+                    }
+                  }}
+                  className="text-xxs bg-white/5 border border-white/10 rounded px-1 py-0.5"
+                  style={{ color: 'var(--color-text-primary)' }}
+                >
+                  <option value="">Select table...</option>
+                  {otherTables.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {!!targetTableId && (
+                  <select
+                    value={fkEdge?.targetColumnId ?? ''}
+                    onChange={(e) => {
+                      const newCol = e.target.value || undefined
+                      if (fkEdge) {
+                        updateFkEdge(containerId, fkEdge.id, { targetColumnId: newCol })
+                      }
+                    }}
+                    className="text-xxs bg-white/5 border border-white/10 rounded px-1 py-0.5"
+                    style={{ color: 'var(--color-text-primary)' }}
+                  >
+                    <option value="">Any PK col</option>
+                    {targetColumns.map(c => (
+                      <option key={c.id ?? c.name} value={c.id ?? c.name}>
+                        {c.name} {c.isPrimaryKey ? '(PK)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+          </>
           )
         })}
       </div>

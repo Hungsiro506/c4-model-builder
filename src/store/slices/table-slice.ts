@@ -1,14 +1,15 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
-import type { TableDef, ColumnDef } from '@/types/model'
+import type { TableDef, ColumnDef, FkEdgeDef } from '@/types/model'
 import { nanoid } from '../internals'
 
 export type TableSlice = Pick<WorkspaceState,
-  | 'tableData' | 'mermaidText' | 'selectedTable'
+  | 'tableData' | 'mermaidText' | 'selectedTable' | 'fkEdges'
   | 'addTable' | 'updateTable' | 'deleteTable'
   | 'addColumn' | 'updateColumn' | 'deleteColumn'
   | 'moveColumn' | 'setTablesForContainer' | 'setMermaidText'
   | 'selectTable' | 'clearTableSelection'
+  | 'addFkEdge' | 'updateFkEdge' | 'deleteFkEdge'
 >
 
 export const createTableSlice: StateCreator<
@@ -20,6 +21,7 @@ export const createTableSlice: StateCreator<
   tableData: {},
   mermaidText: {},
   selectedTable: null,
+  fkEdges: {},
 
   // ─── Table CRUD ──────────────────────────────────────────────────
 
@@ -54,6 +56,13 @@ export const createTableSlice: StateCreator<
       const tables = s.tableData[containerId]
       if (!tables) return
       s.tableData[containerId] = tables.filter(t => t.id !== tableId)
+      // Cascade: remove FK edges referencing the deleted table
+      const edges = s.fkEdges[containerId]
+      if (edges) {
+        s.fkEdges[containerId] = edges.filter(
+          e => e.sourceTableId !== tableId && e.targetTableId !== tableId,
+        )
+      }
     })
   },
 
@@ -98,6 +107,14 @@ export const createTableSlice: StateCreator<
       table.columns = table.columns.filter(c =>
         !('id' in c) || (c as ColumnDef & { id: string }).id !== columnId,
       )
+      // Cascade: clear FK edge column refs pointing to the deleted column
+      const edges = s.fkEdges[containerId]
+      if (edges) {
+        for (const e of edges) {
+          if (e.sourceColumnId === columnId) e.sourceColumnId = undefined
+          if (e.targetColumnId === columnId) e.targetColumnId = undefined
+        }
+      }
     })
   },
 
@@ -141,6 +158,74 @@ export const createTableSlice: StateCreator<
   clearTableSelection: () => {
     set((s) => {
       s.selectedTable = null
+    })
+  },
+
+  // ─── FK Edge CRUD ─────────────────────────────────────────────────
+
+  addFkEdge: (containerId, sourceTableId, targetTableId) => {
+    const fkEdge: FkEdgeDef = {
+      id: nanoid(),
+      sourceTableId,
+      targetTableId,
+    }
+    set((s) => {
+      if (!s.fkEdges[containerId]) {
+        s.fkEdges[containerId] = []
+      }
+      // Avoid duplicate: same source→target already exists
+      const existing = s.fkEdges[containerId].find(
+        e => e.sourceTableId === sourceTableId && e.targetTableId === targetTableId,
+      )
+      if (existing) return
+
+      // Auto-resolve sourceColumnId: first FK column in source table
+      const sourceTables = s.tableData[containerId]
+      if (sourceTables) {
+        const srcTable = sourceTables.find(t => t.id === sourceTableId)
+        if (srcTable) {
+          const fkCol = srcTable.columns.find(c => c.isForeignKey)
+          if (fkCol) fkEdge.sourceColumnId = fkCol.id ?? fkCol.name
+          // Mark first non-PK column as FK if no FK column exists yet
+          if (!fkEdge.sourceColumnId) {
+            const firstNonPk = srcTable.columns.find(c => !c.isPrimaryKey)
+            if (firstNonPk) {
+              firstNonPk.isForeignKey = true
+              fkEdge.sourceColumnId = firstNonPk.id ?? firstNonPk.name
+            }
+          }
+        }
+      }
+      // Auto-resolve targetColumnId: first PK column in target table
+      if (sourceTables) {
+        const tgtTable = sourceTables.find(t => t.id === targetTableId)
+        if (tgtTable) {
+          const pkCol = tgtTable.columns.find(c => c.isPrimaryKey)
+          if (pkCol) fkEdge.targetColumnId = pkCol.id ?? pkCol.name
+        }
+      }
+
+      s.fkEdges[containerId].push(fkEdge)
+    })
+    return fkEdge
+  },
+
+  updateFkEdge: (containerId, fkEdgeId, patch) => {
+    set((s) => {
+      const edges = s.fkEdges[containerId]
+      if (!edges) return
+      const edge = edges.find(e => e.id === fkEdgeId)
+      if (!edge) return
+      if (patch.sourceColumnId !== undefined) edge.sourceColumnId = patch.sourceColumnId
+      if (patch.targetColumnId !== undefined) edge.targetColumnId = patch.targetColumnId
+    })
+  },
+
+  deleteFkEdge: (containerId, fkEdgeId) => {
+    set((s) => {
+      const edges = s.fkEdges[containerId]
+      if (!edges) return
+      s.fkEdges[containerId] = edges.filter(e => e.id !== fkEdgeId)
     })
   },
 })

@@ -51,7 +51,7 @@ import {
   EXPAND_BOUNDARY_PREFIX,
 } from './canvasBuilders'
 import { highlightActive } from '@/lib/highlight'
-import { canConnectElements } from '@/lib/connectionValidation'
+import { canConnectElements, isTableNodeId, parseTableNodeId } from '@/lib/connectionValidation'
 import { expandComposite } from '@/lib/expandComposite'
 import { axisForDirection, gapShiftMany, gapShiftCross, gapShiftCrossRect, EXPAND_MARGIN } from '@/lib/expandLayout'
 import CanvasGuide from './CanvasGuide'
@@ -283,6 +283,7 @@ export default function Canvas() {
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const expandedElementIds = useWorkspaceStore((s) => s.expandedElementIds)
   const tableData = useWorkspaceStore((s) => s.tableData)
+  const fkEdgesState = useWorkspaceStore((s) => s.fkEdges)
   const selectElements = useWorkspaceStore((s) => s.selectElements)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
@@ -296,6 +297,7 @@ export default function Canvas() {
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const syncAutoLayoutPositions = useWorkspaceStore((s) => s.syncAutoLayoutPositions)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
+  const addFkEdge = useWorkspaceStore((s) => s.addFkEdge)
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
   const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
@@ -495,6 +497,7 @@ export default function Canvas() {
         onDrillIn: stableDrillInto,
         viewCountMap,
         tableData,
+        fkEdges: fkEdgesState,
       }
       // Sizing pass: how much each top-level expanded box grows vs 200×100.
       const { growth } = expandComposite(laidOut, expandCtx)
@@ -564,14 +567,15 @@ export default function Canvas() {
     let fkEdges: Edge[] = []
     for (const cid of expandedElementIds) {
       const tables = tableData[cid]
-      if (tables && tables.length > 1) {
-        fkEdges = fkEdges.concat(buildTableEdges(cid, tables))
+      const manual = fkEdgesState[cid]
+      if (tables && tables.length > 0) {
+        fkEdges = fkEdges.concat(buildTableEdges(cid, tables, manual))
       }
     }
     const edges = [...modelEdges, ...fkEdges]
 
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableData])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableData, fkEdgesState])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.
@@ -1248,10 +1252,21 @@ export default function Canvas() {
         if (recentConnect.current.has(key)) return
         recentConnect.current.add(key)
         setTimeout(() => { recentConnect.current.delete(key) }, 300)
+
+        // Route table-to-table connections to FK edge CRUD instead of C4 relationships
+        if (isTableNodeId(connection.source) && isTableNodeId(connection.target)) {
+          const src = parseTableNodeId(connection.source)
+          const tgt = parseTableNodeId(connection.target)
+          if (src && tgt && src.containerId === tgt.containerId) {
+            addFkEdge(src.containerId, src.tableId, tgt.tableId)
+          }
+          return
+        }
+
         addRelationship(connection.source, connection.target)
       }
     },
-    [addRelationship],
+    [addRelationship, addFkEdge],
   )
 
   const onReconnect = useCallback(

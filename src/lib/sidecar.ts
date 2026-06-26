@@ -1,4 +1,4 @@
-import type { Workspace, ElementStatus, LineStyle, TableDef } from '@/types/model'
+import type { Workspace, ElementStatus, LineStyle, TableDef, FkEdgeDef } from '@/types/model'
 import { allViewsOf } from '@/store/workspace-helpers'
 import { createLogger } from '@/lib/logger'
 import { isFiniteNumber, isRecord, isRecordOf } from '@/lib/guards'
@@ -61,6 +61,14 @@ interface SidecarTable {
   columns: SidecarTableColumn[]
 }
 
+interface SidecarFkEdge {
+  id: string
+  sourceTableId: string
+  targetTableId: string
+  sourceColumnId?: string
+  targetColumnId?: string
+}
+
 export interface SidecarData {
   version: 1
   elements?: Record<string, SidecarElement>
@@ -68,6 +76,8 @@ export interface SidecarData {
   views?: Record<string, SidecarView>
   /** Database table definitions, keyed by container ID. Sidecar-only, never in DSL. */
   tables?: Record<string, SidecarTable[]>
+  /** FK edge definitions, keyed by container ID. Sidecar-only, never in DSL. */
+  fkEdges?: Record<string, SidecarFkEdge[]>
 }
 
 function isSidecarElement(value: unknown): value is SidecarElement {
@@ -105,6 +115,16 @@ function isSidecarView(value: unknown): value is SidecarView {
   return true
 }
 
+function isSidecarFkEdge(value: unknown): value is SidecarFkEdge {
+  if (!isRecord(value)) return false
+  if (typeof value.id !== 'string') return false
+  if (typeof value.sourceTableId !== 'string') return false
+  if (typeof value.targetTableId !== 'string') return false
+  if ('sourceColumnId' in value && value.sourceColumnId !== undefined && typeof value.sourceColumnId !== 'string') return false
+  if ('targetColumnId' in value && value.targetColumnId !== undefined && typeof value.targetColumnId !== 'string') return false
+  return true
+}
+
 function isSidecarTableColumn(value: unknown): value is SidecarTableColumn {
   if (!isRecord(value)) return false
   if (typeof value.name !== 'string' || typeof value.type !== 'string') return false
@@ -133,12 +153,22 @@ function isSidecarData(value: unknown): value is SidecarData {
       if (!Array.isArray(tableList) || !tableList.every(isSidecarTable)) return false
     }
   }
+  if ('fkEdges' in value && value.fkEdges !== undefined) {
+    if (!isRecord(value.fkEdges)) return false
+    for (const edgeList of Object.values(value.fkEdges)) {
+      if (!Array.isArray(edgeList) || !edgeList.every(isSidecarFkEdge)) return false
+    }
+  }
   return true
 }
 
 // ─── Extract sidecar from workspace ─────────────────────────────────
 
-export function extractSidecar(workspace: Workspace, tableData?: Record<string, TableDef[]>): SidecarData | null {
+export function extractSidecar(
+  workspace: Workspace,
+  tableData?: Record<string, TableDef[]>,
+  fkEdges?: Record<string, FkEdgeDef[]>,
+): SidecarData | null {
   const sidecar: SidecarData = { version: 1 }
   let hasData = false
 
@@ -196,15 +226,36 @@ export function extractSidecar(workspace: Workspace, tableData?: Record<string, 
     if (Object.keys(tables).length > 0) sidecar.tables = tables
   }
 
+  // FK edges: foreign key relationships between tables, keyed by container ID
+  if (fkEdges) {
+    const edges: Record<string, SidecarFkEdge[]> = {}
+    for (const [containerId, edgeList] of Object.entries(fkEdges)) {
+      if (edgeList.length > 0) {
+        edges[containerId] = edgeList.map(e => ({
+          id: e.id,
+          sourceTableId: e.sourceTableId,
+          targetTableId: e.targetTableId,
+          ...(e.sourceColumnId !== undefined ? { sourceColumnId: e.sourceColumnId } : {}),
+          ...(e.targetColumnId !== undefined ? { targetColumnId: e.targetColumnId } : {}),
+        }))
+        hasData = true
+      }
+    }
+    if (Object.keys(edges).length > 0) sidecar.fkEdges = edges
+  }
+
   return hasData ? sidecar : null
 }
 
 // ─── Apply sidecar to workspace ─────────────────────────────────────
 
-/** Apply sidecar data to a workspace. Returns table definitions extracted from
- *  the sidecar (keyed by container ID), or null if the sidecar has no tables. */
-export function applySidecar(workspace: Workspace, sidecar: SidecarData): Record<string, TableDef[]> | null {
-  if (sidecar.version !== 1) return null
+/** Apply sidecar data to a workspace. Returns table definitions and FK edges
+ *  extracted from the sidecar (keyed by container ID), or null if empty. */
+export function applySidecar(workspace: Workspace, sidecar: SidecarData): {
+  tableData: Record<string, TableDef[]> | null
+  fkEdges: Record<string, FkEdgeDef[]> | null
+} {
+  if (sidecar.version !== 1) return { tableData: null, fkEdges: null }
 
   // Elements — only apply known sidecar properties
   if (sidecar.elements) {
@@ -280,8 +331,9 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): Record
   }
 
   // Tables: extract from sidecar
+  let tableData: Record<string, TableDef[]> | null = null
   if (sidecar.tables) {
-    const tableData: Record<string, TableDef[]> = {}
+    tableData = {}
     for (const [containerId, tableList] of Object.entries(sidecar.tables)) {
       tableData[containerId] = tableList.map(t => ({
         id: t.id,
@@ -296,10 +348,24 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): Record
         })),
       }))
     }
-    return tableData
   }
 
-  return null
+  // FK edges: extract from sidecar
+  let fkEdges: Record<string, FkEdgeDef[]> | null = null
+  if (sidecar.fkEdges) {
+    fkEdges = {}
+    for (const [containerId, edgeList] of Object.entries(sidecar.fkEdges)) {
+      fkEdges[containerId] = edgeList.map(e => ({
+        id: e.id,
+        sourceTableId: e.sourceTableId,
+        targetTableId: e.targetTableId,
+        sourceColumnId: e.sourceColumnId,
+        targetColumnId: e.targetColumnId,
+      }))
+    }
+  }
+
+  return { tableData, fkEdges }
 }
 
 // ─── Sidecar filename ───────────────────────────────────────────────

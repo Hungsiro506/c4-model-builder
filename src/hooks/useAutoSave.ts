@@ -53,7 +53,7 @@ export function useAutoSave() {
 
         if (hasSingleFile || (dirHandle && filename)) {
           const dsl = serializeDSL(state.workspace)
-          const sidecar = extractSidecar(state.workspace, state.tableData)
+          const sidecar = extractSidecar(state.workspace, state.tableData, state.fkEdges)
 
           if (hasSingleFile) {
             writeToCurrentHandle(dsl)

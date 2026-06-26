@@ -1,6 +1,6 @@
 import type {
   Workspace, ModelElement, Relationship, Group,
-  ViewType, ElementStatus, TableDef, ColumnDef,
+  ViewType, ElementStatus, TableDef, ColumnDef, FkEdgeDef,
 } from '@/types/model'
 import type { ScopeViolation } from '@/lib/scopeValidation'
 export interface CascadeImpact {
@@ -108,7 +108,7 @@ export interface WorkspaceState extends UndoState {
   revalidateScope: () => void
 
   // Workspace lifecycle
-  loadWorkspace: (workspace: Workspace, tableData?: Record<string, TableDef[]>) => void
+  loadWorkspace: (workspace: Workspace, tableData?: Record<string, TableDef[]>, fkEdges?: Record<string, FkEdgeDef[]>) => void
   closeWorkspace: () => void
   updateWorkspaceMeta: (patch: { name?: string; description?: string }) => void
 
@@ -275,4 +275,10 @@ export interface WorkspaceState extends UndoState {
   setMermaidText: (containerId: string, text: string) => void
   selectTable: (containerId: string, tableId: string) => void
   clearTableSelection: () => void
+
+  /** FK edge definitions keyed by container ID. Sidecar-persisted. */
+  fkEdges: Record<string, FkEdgeDef[]>
+  addFkEdge: (containerId: string, sourceTableId: string, targetTableId: string) => FkEdgeDef
+  updateFkEdge: (containerId: string, fkEdgeId: string, patch: Partial<Pick<FkEdgeDef, 'sourceColumnId' | 'targetColumnId'>>) => void
+  deleteFkEdge: (containerId: string, fkEdgeId: string) => void
 }

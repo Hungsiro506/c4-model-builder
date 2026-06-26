@@ -429,16 +429,16 @@ describe('tables in extractSidecar / applySidecar', () => {
         ],
       },
     }
-    const tables = applySidecar(ws, sidecar)
-    expect(tables).not.toBeNull()
-    expect(tables!['db-1']).toHaveLength(1)
-    expect(tables!['db-1'][0].name).toBe('users')
+    const { tableData } = applySidecar(ws, sidecar)
+    expect(tableData).not.toBeNull()
+    expect(tableData!['db-1']).toHaveLength(1)
+    expect(tableData!['db-1'][0].name).toBe('users')
   })
 
-  it('applySidecar returns null when sidecar has no tables', () => {
+  it('applySidecar returns null tableData when sidecar has no tables', () => {
     const ws = makeWorkspace()
-    const tables = applySidecar(ws, { version: 1 })
-    expect(tables).toBeNull()
+    const { tableData } = applySidecar(ws, { version: 1 })
+    expect(tableData).toBeNull()
   })
 
   it('tables round-trip through extractSidecar → serialize → parse → applySidecar', () => {
@@ -460,12 +460,12 @@ describe('tables in extractSidecar / applySidecar', () => {
     const sidecar = extractSidecar(ws, tableData)!
     const json = serializeSidecar(sidecar)
     const parsed = parseSidecar(json)!
-    const tables = applySidecar(ws, parsed)!
+    const { tableData: tables } = applySidecar(ws, parsed)
 
-    expect(tables['db-1']).toHaveLength(1)
-    expect(tables['db-1'][0].name).toBe('users')
-    expect(tables['db-1'][0].columns).toHaveLength(3)
-    expect(tables['db-1'][0].columns[0]).toMatchObject({ name: 'id', type: 'int', isPrimaryKey: true })
+    expect(tables!['db-1']).toHaveLength(1)
+    expect(tables!['db-1'][0].name).toBe('users')
+    expect(tables!['db-1'][0].columns).toHaveLength(3)
+    expect(tables!['db-1'][0].columns[0]).toMatchObject({ name: 'id', type: 'int', isPrimaryKey: true })
   })
 
   it('parseSidecar returns null for invalid tables shape', () => {

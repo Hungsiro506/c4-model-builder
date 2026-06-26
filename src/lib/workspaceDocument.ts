@@ -1,4 +1,4 @@
-import type { Workspace, TableDef } from '@/types/model'
+import type { Workspace, TableDef, FkEdgeDef } from '@/types/model'
 import { parseDSL, type ParseError } from '@/lib/dsl'
 import { applySidecar, parseSidecar } from '@/lib/sidecar'
 
@@ -13,6 +13,8 @@ export interface WorkspaceDocumentResult {
   errors: ParseError[]
   /** Database table definitions extracted from sidecar, keyed by container ID. */
   tableData: Record<string, TableDef[]>
+  /** FK edge definitions extracted from sidecar, keyed by container ID. */
+  fkEdges: Record<string, FkEdgeDef[]>
 }
 
 export function parseWorkspaceDocument({
@@ -25,10 +27,12 @@ export function parseWorkspaceDocument({
 
   const sidecar = sidecarJson ? parseSidecar(sidecarJson) : null
   const tableData: Record<string, TableDef[]> = {}
+  const fkEdges: Record<string, FkEdgeDef[]> = {}
   if (sidecar) {
-    const tables = applySidecar(workspace, sidecar)
-    if (tables) Object.assign(tableData, tables)
+    const result = applySidecar(workspace, sidecar)
+    if (result.tableData) Object.assign(tableData, result.tableData)
+    if (result.fkEdges) Object.assign(fkEdges, result.fkEdges)
   }
 
-  return { workspace, errors, tableData }
+  return { workspace, errors, tableData, fkEdges }
 }

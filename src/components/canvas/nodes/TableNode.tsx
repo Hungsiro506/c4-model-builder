@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react'
-import { type NodeProps } from '@xyflow/react'
+import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { TableDef, ElementStyle } from '@/types/model'
 import { useWorkspaceStore } from '@/store/workspace'
 import { Key, ArrowRightLeft } from 'lucide-react'
@@ -56,6 +56,22 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
         }
       }}
     >
+      {/* Connection handles for FK edge drawing */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="top-target"
+        className="c4-handle c4-handle-target"
+        isConnectable={true}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="bottom-source"
+        className="c4-handle c4-handle-visible"
+        isConnectable={true}
+      />
+
       {/* Header */}
       <div
         style={{

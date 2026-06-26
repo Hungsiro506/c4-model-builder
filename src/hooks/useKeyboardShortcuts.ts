@@ -88,13 +88,13 @@ const GLOBAL_SHORTCUTS: Record<string, KeyHandler> = {
   'mod+o': (store) => {
     openDSLFile().then(file => {
       if (!file) return
-      const { workspace, errors, tableData } = parseWorkspaceDocument({
+      const { workspace, errors, tableData, fkEdges } = parseWorkspaceDocument({
         content: file.content,
         fallbackName: file.name.replace(/\.dsl$/, ''),
         sidecarJson: file.sidecarJson,
       })
       if (errors.length > 0) log.warn('DSL parse warnings', errors)
-      store.loadWorkspace(workspace, tableData)
+      store.loadWorkspace(workspace, tableData, fkEdges)
     })
   },
   'p': (store) => {
