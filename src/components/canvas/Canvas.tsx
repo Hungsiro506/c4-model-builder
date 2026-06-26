@@ -51,7 +51,7 @@ import {
   EXPAND_BOUNDARY_PREFIX,
 } from './canvasBuilders'
 import { highlightActive } from '@/lib/highlight'
-import { canConnectElements, isTableNodeId, parseTableNodeId } from '@/lib/connectionValidation'
+import { canConnectElements } from '@/lib/connectionValidation'
 import { expandComposite } from '@/lib/expandComposite'
 import { axisForDirection, gapShiftMany, gapShiftCross, gapShiftCrossRect, EXPAND_MARGIN } from '@/lib/expandLayout'
 import CanvasGuide from './CanvasGuide'
@@ -297,7 +297,6 @@ export default function Canvas() {
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const syncAutoLayoutPositions = useWorkspaceStore((s) => s.syncAutoLayoutPositions)
   const addRelationship = useWorkspaceStore((s) => s.addRelationship)
-  const addFkEdge = useWorkspaceStore((s) => s.addFkEdge)
   const reconnectRelationship = useWorkspaceStore((s) => s.reconnectRelationship)
   const activeTagFilter = useWorkspaceStore((s) => s.activeTagFilter)
   const activeStatusFilter = useWorkspaceStore((s) => s.activeStatusFilter)
@@ -1252,21 +1251,10 @@ export default function Canvas() {
         if (recentConnect.current.has(key)) return
         recentConnect.current.add(key)
         setTimeout(() => { recentConnect.current.delete(key) }, 300)
-
-        // Route table-to-table connections to FK edge CRUD instead of C4 relationships
-        if (isTableNodeId(connection.source) && isTableNodeId(connection.target)) {
-          const src = parseTableNodeId(connection.source)
-          const tgt = parseTableNodeId(connection.target)
-          if (src && tgt && src.containerId === tgt.containerId) {
-            addFkEdge(src.containerId, src.tableId, tgt.tableId)
-          }
-          return
-        }
-
         addRelationship(connection.source, connection.target)
       }
     },
-    [addRelationship, addFkEdge],
+    [addRelationship],
   )
 
   const onReconnect = useCallback(
