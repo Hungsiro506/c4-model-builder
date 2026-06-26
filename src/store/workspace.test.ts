@@ -4546,4 +4546,45 @@ describe('table slice', () => {
       expect(useWorkspaceStore.getState().selectedTable).toEqual({ containerId: 'db-2', tableId: 't2' })
     })
   })
+
+  describe('FK edge CRUD', () => {
+    it('addFkEdge creates edge and resolves by sourceColumnId', () => {
+      const cid = useWorkspaceStore.getState().addContainer('test', 'My DB')
+      const t1 = useWorkspaceStore.getState().addTable(cid, 'customers')
+      const t2 = useWorkspaceStore.getState().addTable(cid, 'orders')
+      const col = useWorkspaceStore.getState().addColumn(cid, t2.id, 'customer_id', 'int')
+      useWorkspaceStore.getState().updateColumn(cid, t2.id, col.id, { isForeignKey: true })
+
+      const edge = useWorkspaceStore.getState().addFkEdge(cid, t2.id, t1.id, col.id)
+      expect(edge.sourceTableId).toBe(t2.id)
+      expect(edge.targetTableId).toBe(t1.id)
+      expect(edge.sourceColumnId).toBe(col.id)
+
+      // Verify findable by sourceColumnId
+      const state = useWorkspaceStore.getState()
+      const found = state.fkEdges[cid]?.find(e => e.sourceTableId === t2.id && e.sourceColumnId === col.id)
+      expect(found).toBeDefined()
+      expect(found!.targetTableId).toBe(t1.id)
+    })
+
+    it('updateFkEdge changes targetTableId', () => {
+      const cid = useWorkspaceStore.getState().addContainer('test2', 'DB2')
+      const t1 = useWorkspaceStore.getState().addTable(cid, 'products')
+      const t2 = useWorkspaceStore.getState().addTable(cid, 'order_items')
+      const t3 = useWorkspaceStore.getState().addTable(cid, 'inventory')
+      const col = useWorkspaceStore.getState().addColumn(cid, t2.id, 'product_id', 'int')
+      useWorkspaceStore.getState().updateColumn(cid, t2.id, col.id, { isForeignKey: true })
+
+      const edge = useWorkspaceStore.getState().addFkEdge(cid, t2.id, t1.id, col.id)
+      expect(edge.targetTableId).toBe(t1.id)
+
+      // Change target to different table
+      useWorkspaceStore.getState().updateFkEdge(cid, edge.id, { targetTableId: t3.id, targetColumnId: undefined })
+
+      const state = useWorkspaceStore.getState()
+      const updated = state.fkEdges[cid]?.find(e => e.id === edge.id)
+      expect(updated).toBeDefined()
+      expect(updated!.targetTableId).toBe(t3.id)
+    })
+  })
 })
