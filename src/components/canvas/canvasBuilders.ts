@@ -1139,7 +1139,6 @@ export function buildTableEdges(
   tables: TableDef[],
   manualFkEdges?: FkEdgeDef[],
 ): Edge[] {
-  console.log('[FK buildTableEdges] container:', containerId, 'tables#:', tables.length, 'manual#:', manualFkEdges?.length)
   const edges: Edge[] = []
 
   // Auto-resolved FK edges from naming convention
@@ -1163,6 +1162,8 @@ export function buildTableEdges(
       id: `__fk__${containerId}__${pair.sourceTableId}__${pair.sourceColumnId}__${pair.targetTableId}`,
       source: tableNodeId(containerId, pair.sourceTableId),
       target: tableNodeId(containerId, pair.targetTableId),
+      sourceHandle: 'bottom-source',
+      targetHandle: 'top-target',
       type: 'fkEdge',
       data: {
         label: sourceCol?.name ?? '',
@@ -1191,6 +1192,8 @@ export function buildTableEdges(
       id: `__fk_manual__${containerId}__${fk.id}`,
       source: tableNodeId(containerId, fk.sourceTableId),
       target: tableNodeId(containerId, fk.targetTableId),
+      sourceHandle: 'bottom-source',
+      targetHandle: 'top-target',
       type: 'fkEdge',
       data: {
         label: sourceCol?.name ?? '',
@@ -1208,6 +1211,5 @@ export function buildTableEdges(
     })
   }
 
-  console.log('[FK buildTableEdges] returning', edges.length, 'edges:', edges.map(e => e.id))
   return edges
 }

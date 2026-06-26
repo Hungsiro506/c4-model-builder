@@ -27,7 +27,6 @@ function FkEdge({
     targetPosition,
     borderRadius: 12,
   })
-  console.log('[FkEdge render]', id, 'src:', sourceX, sourceY, 'tgt:', targetX, targetY, 'style:', JSON.stringify(edgeStyle))
 
   return (
     <>

@@ -567,15 +567,12 @@ export default function Canvas() {
     for (const cid of expandedElementIds) {
       const tables = tableData[cid]
       const manual = fkEdgesState[cid]
-      console.log('[FK debug] container:', cid, 'tables:', tables?.length, 'manualFk:', manual?.length, 'expandedIds:', expandedElementIds)
       if (tables && tables.length > 0) {
         const built = buildTableEdges(cid, tables, manual)
-        console.log('[FK debug] built edges:', built.length, built.map(e => `${e.source} → ${e.target}`))
         fkEdges = fkEdges.concat(built)
       }
     }
     const edges = [...modelEdges, ...fkEdges]
-    console.log('[FK debug] total edges:', edges.length, 'model:', modelEdges.length, 'fk:', fkEdges.length)
 
     return { initialNodes: allNodes, initialEdges: edges }
   }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableData, fkEdgesState])

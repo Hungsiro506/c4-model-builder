@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react'
-import { type NodeProps } from '@xyflow/react'
+import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { TableDef, ElementStyle } from '@/types/model'
 import { useWorkspaceStore } from '@/store/workspace'
 import { Key, ArrowRightLeft } from 'lucide-react'
@@ -56,6 +56,11 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
         }
       }}
     >
+      {/* Hidden handles — not interactive, only for ReactFlow edge targeting.
+          FK edges need handles to exist on source/target nodes (React Flow #008). */}
+      <Handle type="source" position={Position.Bottom} id="bottom-source" style={{ opacity: 0, pointerEvents: 'none' }} />
+      <Handle type="target" position={Position.Top} id="top-target" style={{ opacity: 0, pointerEvents: 'none' }} />
+
       {/* Header */}
       <div
         style={{
