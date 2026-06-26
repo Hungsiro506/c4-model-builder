@@ -6,7 +6,8 @@ Keep current as the feature changes.
 > Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
 > **PR B1 merged** (2026-06-25). Branch `feat/db-table-view-b1` (PR #23).
 > **PR B2 merged** (2026-06-25). Branch `feat/db-table-view-b2` (PR #24).
-> PR B2.5 next (FK edges). PR B3 deferred (Mermaid overlay).
+> **PR B2.5 submitted** (2026-06-26). Branch `feat/db-table-view-b2.5` (PR #25).
+> PR B3 deferred (Mermaid overlay).
 
 ## Problem
 
@@ -93,7 +94,7 @@ documentation, not just draw a cylinder and move on.
 
 ## Open items (deferred)
 
-- FK edge rendering between table nodes
+- ~~FK edge rendering between table nodes~~ (done, PR #25)
 - Undo support for table edits
 - SQL DDL import / `DatabaseProvider` interface
 - Table highlight/fade participation
@@ -188,3 +189,11 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
   expand pipeline integration, Mermaid overlay, RightPanel table editor
 - Mockup: `docs/mockups/db-diagram-panel.html`
 - Plan: see SCALING-DESIGN.md §3 (Database table view)
+
+### 2026-06-26 — PR B2.5 submitted (PR #25)
+- FK resolver: naming-convention matching (`customer_id` → `customers.id`)
+- `buildTableEdges()`: React Flow edges with thin dashed indigo style + FK column labels
+- `FkEdge.tsx`: dedicated edge component
+- Dagre wiring: FK edges participate in layout so tables arrange by FK relationships
+- FK toggle per column in TableEditor (indigo badge next to PK)
+- 9 new tests. To be squash-merged as `feat: add foreign key edges between database tables`.
