@@ -19,7 +19,6 @@ import {
   tableNodeId,
   getTableNodeSize,
   buildTableNode,
-  resolveTableFKs,
   type ContentNodeContext,
 } from '@/components/canvas/canvasBuilders'
 
@@ -117,20 +116,8 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
       g.setEdge(rel.sourceId, rel.destinationId)
     }
   }
-  // FK edges between table nodes: resolve and wire into dagre so layout
+  // FK edges between table nodes: wire manual FK edges into dagre so layout
   // accounts for foreign key relationships between tables.
-  // Auto-resolved FK edges from naming convention
-  if (tables.length > 1) {
-    const fkPairs = resolveTableFKs(tables)
-    for (const pair of fkPairs) {
-      const srcId = tableNodeId(element.id, pair.sourceTableId)
-      const tgtId = tableNodeId(element.id, pair.targetTableId)
-      if (childIds.has(srcId) && childIds.has(tgtId)) {
-        g.setEdge(srcId, tgtId)
-      }
-    }
-  }
-  // Manual FK edges stored by user
   const manualEdges = ctx.fkEdges[element.id]
   if (manualEdges && manualEdges.length > 0) {
     for (const fk of manualEdges) {

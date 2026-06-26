@@ -1141,47 +1141,7 @@ export function buildTableEdges(
 ): Edge[] {
   const edges: Edge[] = []
 
-  // Auto-resolved FK edges from naming convention
-  const autoPairs = resolveTableFKs(tables)
-
-  // Build dedup set from manual edges (sourceTableId->targetTableId)
-  const manualDedup = new Set(
-    (manualFkEdges ?? []).map(e => `${e.sourceTableId}->${e.targetTableId}`),
-  )
-
-  // Filter auto pairs: drop any that overlap with manual edges
-  const filteredAutoPairs = autoPairs.filter(
-    p => !manualDedup.has(`${p.sourceTableId}->${p.targetTableId}`),
-  )
-
-  for (const pair of filteredAutoPairs) {
-    const sourceTable = tables.find(t => t.id === pair.sourceTableId)
-    const sourceCol = sourceTable?.columns.find(c => (c.id ?? c.name) === pair.sourceColumnId)
-
-    edges.push({
-      id: `__fk__${containerId}__${pair.sourceTableId}__${pair.sourceColumnId}__${pair.targetTableId}`,
-      source: tableNodeId(containerId, pair.sourceTableId),
-      target: tableNodeId(containerId, pair.targetTableId),
-      sourceHandle: 'bottom-source',
-      targetHandle: 'top-target',
-      type: 'fkEdge',
-      data: {
-        label: sourceCol?.name ?? '',
-        sourceColumnId: pair.sourceColumnId,
-        targetColumnId: pair.targetColumnId,
-      },
-      style: {
-        stroke: 'var(--color-fk-edge, #6366f1)',
-        strokeDasharray: '6 3',
-        strokeWidth: 1.5,
-      },
-      selectable: false,
-      focusable: false,
-      zIndex: 3,
-    })
-  }
-
-  // Manual FK edges
+  // Manual FK edges (only — auto-resolution disabled)
   for (const fk of manualFkEdges ?? []) {
     const sourceTable = tables.find(t => t.id === fk.sourceTableId)
     const sourceCol = fk.sourceColumnId

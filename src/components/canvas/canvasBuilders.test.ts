@@ -368,6 +368,8 @@ describe('buildTableEdges', () => {
     expect(buildTableEdges('db1', tables)).toEqual([])
   })
 
+  const manualEdge = { id: 'fe1', sourceTableId: 't2', targetTableId: 't1', sourceColumnId: 'col1' }
+
   it('builds React Flow edge with correct source/target node ids', () => {
     const tables: TableDef[] = [
       {
@@ -378,11 +380,11 @@ describe('buildTableEdges', () => {
       {
         id: 't2', name: 'orders', columns: [
           { name: 'id', type: 'int', isPrimaryKey: true },
-          { id: 'col1', name: 'customer_id', type: 'int', isForeignKey: true },
+          { id: 'col1', name: 'customer_id', type: 'int' },
         ],
       },
     ]
-    const edges = buildTableEdges('db1', tables)
+    const edges = buildTableEdges('db1', tables, [manualEdge])
     expect(edges).toHaveLength(1)
     const edge = edges[0]
     expect(edge.source).toBe('__table__db1__t2')
@@ -400,11 +402,11 @@ describe('buildTableEdges', () => {
       },
       {
         id: 't2', name: 'orders', columns: [
-          { name: 'customer_id', type: 'int', isForeignKey: true },
+          { id: 'col1', name: 'customer_id', type: 'int' },
         ],
       },
     ]
-    const edges = buildTableEdges('db1', tables)
+    const edges = buildTableEdges('db1', tables, [manualEdge])
     expect(edges[0].style).toMatchObject({
       stroke: expect.any(String),
       strokeDasharray: expect.any(String),
@@ -421,11 +423,11 @@ describe('buildTableEdges', () => {
       },
       {
         id: 't2', name: 'orders', columns: [
-          { name: 'customer_id', type: 'int', isForeignKey: true },
+          { id: 'col1', name: 'customer_id', type: 'int' },
         ],
       },
     ]
-    const edges = buildTableEdges('db1', tables)
+    const edges = buildTableEdges('db1', tables, [manualEdge])
     expect(edges[0].data).toMatchObject({ label: 'customer_id' })
   })
 })

@@ -3,6 +3,12 @@ import type { WorkspaceState } from '../workspace-types'
 import type { TableDef, ColumnDef, FkEdgeDef } from '@/types/model'
 import { nanoid } from '../internals'
 
+/** UUID v7 for sidecar-only IDs (tables, columns, FK edges).
+ *  These never go into DSL so hyphens are safe. */
+function uuid(): string {
+  return crypto.randomUUID()
+}
+
 export type TableSlice = Pick<WorkspaceState,
   | 'tableData' | 'mermaidText' | 'selectedTable' | 'fkEdges'
   | 'addTable' | 'updateTable' | 'deleteTable'
@@ -27,7 +33,7 @@ export const createTableSlice: StateCreator<
 
   addTable: (containerId, name) => {
     const table: TableDef = {
-      id: nanoid(),
+      id: uuid(),
       name,
       columns: [],
     }
@@ -69,7 +75,7 @@ export const createTableSlice: StateCreator<
   // ─── Column CRUD ─────────────────────────────────────────────────
 
   addColumn: (containerId, tableId, name, type) => {
-    const col = { id: nanoid(), name, type } as ColumnDef & { id: string }
+    const col = { id: uuid(), name, type } as ColumnDef & { id: string }
     set((s) => {
       const tables = s.tableData[containerId]
       if (!tables) return
@@ -165,7 +171,7 @@ export const createTableSlice: StateCreator<
 
   addFkEdge: (containerId, sourceTableId, targetTableId, sourceColumnId) => {
     const fkEdge: FkEdgeDef = {
-      id: nanoid(),
+      id: uuid(),
       sourceTableId,
       targetTableId,
     }
