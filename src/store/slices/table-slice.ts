@@ -1,7 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { WorkspaceState } from '../workspace-types'
 import type { TableDef, ColumnDef, FkEdgeDef } from '@/types/model'
-import { nanoid } from '../internals'
 
 /** UUID v7 for sidecar-only IDs (tables, columns, FK edges).
  *  These never go into DSL so hyphens are safe. */
@@ -215,6 +214,7 @@ export const createTableSlice: StateCreator<
       if (!edge) return
       if (patch.sourceColumnId !== undefined) edge.sourceColumnId = patch.sourceColumnId
       if (patch.targetColumnId !== undefined) edge.targetColumnId = patch.targetColumnId
+      if (patch.targetTableId !== undefined) edge.targetTableId = patch.targetTableId
     })
   },
 
