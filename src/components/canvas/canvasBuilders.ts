@@ -1155,8 +1155,8 @@ export function buildTableEdges(
       id: `__fk_manual__${containerId}__${fk.id}`,
       source: tableNodeId(containerId, fk.sourceTableId),
       target: tableNodeId(containerId, fk.targetTableId),
-      sourceHandle: 'bottom-source',
-      targetHandle: 'top-target',
+      sourceHandle: 'bottom-b-source',
+      targetHandle: 'top-b-target',
       type: 'fkEdge',
       data: {
         label: sourceCol?.name ?? '',
