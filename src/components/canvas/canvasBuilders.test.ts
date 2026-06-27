@@ -158,20 +158,26 @@ describe('getTableNodeSize', () => {
 
 describe('buildTableNode', () => {
   const ctx = { styleIndex: new Map(), active: false }
+  const container: ModelElement = {
+    id: 'c1', type: 'container', name: 'DB', tags: ['Element', 'Container', 'Database'],
+    properties: {}, components: [],
+  }
 
   it('returns a React Flow node of type "table"', () => {
     const td: TableDef = { id: 't1', name: 'Users', columns: [] }
-    const container: ModelElement = {
-      id: 'c1', type: 'container', name: 'DB', tags: ['Element', 'Container', 'Database'],
-      properties: {}, components: [],
-    }
     const node = buildTableNode(td, 'c1', container, { x: 10, y: 20 }, ctx)
     expect(node.type).toBe('table')
     expect(node.id).toBe('__table__c1__t1')
     expect(node.position).toEqual({ x: 10, y: 20 })
     expect(node.data.tableDef).toBe(td)
     expect(node.data.containerId).toBe('c1')
-    expect(node.data.style).toBeUndefined() // no style in empty index
+    expect(node.data.style).toBeUndefined()
+  })
+
+  it('table node is draggable', () => {
+    const td: TableDef = { id: 't1', name: 'Users', columns: [] }
+    const node = buildTableNode(td, 'c1', container, { x: 0, y: 0 }, ctx)
+    expect(node.draggable).toBe(true)
   })
 })
 
