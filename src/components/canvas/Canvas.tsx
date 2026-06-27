@@ -1263,28 +1263,11 @@ export default function Canvas() {
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       if (newConnection.source && newConnection.target) {
-        // FK edge reconnection: drag FK edge endpoint to different table
+        // FK edges: allow handle changes on same table nodes, block cross-table reconnect
         if (oldEdge.id.startsWith('__fk_manual__')) {
-          // Edge ID: __fk_manual__<containerId>__<fkEdgeId>
-          const withoutPrefix = oldEdge.id.slice('__fk_manual__'.length)
-          const sepIdx = withoutPrefix.indexOf('__')
-          if (sepIdx !== -1) {
-            const containerId = withoutPrefix.slice(0, sepIdx)
-            const fkEdgeId = withoutPrefix.slice(sepIdx + 2)
-            // Parse table node IDs: __table__<containerId>__<tableId>
-            const parseTableId = (nodeId: string) => {
-              if (!nodeId.startsWith('__table__')) return null
-              const parts = nodeId.slice('__table__'.length)
-              const idx = parts.indexOf('__')
-              return idx === -1 ? null : { containerId: parts.slice(0, idx), tableId: parts.slice(idx + 2) }
-            }
-            const src = parseTableId(newConnection.source)
-            const tgt = parseTableId(newConnection.target)
-            if (src && tgt && src.containerId === tgt.containerId) {
-              useWorkspaceStore.getState().updateFkEdge(containerId, fkEdgeId, { sourceTableId: src.tableId, targetTableId: tgt.tableId })
-            }
+          if (newConnection.source === oldEdge.source && newConnection.target === oldEdge.target) {
+            setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
           }
-          setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
           return
         }
 
