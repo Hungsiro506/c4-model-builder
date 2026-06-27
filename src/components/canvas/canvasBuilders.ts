@@ -912,7 +912,7 @@ export function buildTableNode(
     position,
     zIndex: 5, // above boundary overlays (-5..0 range) so clicks reach the table
     selectable: false, // tables use custom onClick, not React Flow selection
-    draggable: false,
+    draggable: true,
     data: {
       tableDef,
       containerId,
