@@ -60,6 +60,16 @@ export interface TableDef {
   description?: string
 }
 
+/** Persisted FK edge between two tables within a Database container.
+ *  Stored in sidecar only — never serialized to Structurizr DSL. */
+export interface FkEdgeDef {
+  id: string
+  sourceTableId: string
+  targetTableId: string
+  sourceColumnId?: string
+  targetColumnId?: string
+}
+
 // ─── Groups ────────────────────────────────────────────────────────────
 
 export interface Group {

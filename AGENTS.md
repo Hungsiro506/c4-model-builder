@@ -75,9 +75,16 @@ Hard-won from building the shipped features. Every AI session must follow them.
 
 1. After every change run the full suite: `npm test` (not just the targeted file) +
    `npm run typecheck` + `npm run lint`.
-2. When touching canvas/shared UI components, also run `npm run test:e2e`.
-3. Never edit a passing existing test just to make it green — only update it when the
+2. **Before pushing, run `npm run check`** — it includes `tsc -b` (build mode) which is
+   stricter than `tsc --noEmit`. Build mode catches unused imports and cross-project
+   type errors that `--noEmit` silently passes.
+3. When touching canvas/shared UI components, also run `npm run test:e2e`.
+4. Never edit a passing existing test just to make it green — only update it when the
    functionality genuinely changed, and say why.
+5. **If an existing E2E test starts timing out after your change, your code has a
+   performance regression.** Find it before pushing. Immer draft reads (`s.field` inside
+   `set()` callbacks) create proxy overhead — avoid reading new fields on the draft
+   when the code path doesn't need them. Use `getState()` outside the callback if needed.
 
 ### TDD (Test-Driven Development)
 

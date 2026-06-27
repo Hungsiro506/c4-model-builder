@@ -32,10 +32,12 @@ import {
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
+import FkEdge from './edges/FkEdge'
 import {
   buildNodes,
   buildEdges,
   buildCompositeEdges,
+  buildTableEdges,
   buildGroupNodes,
   buildBoundaryNodes,
   buildDrillableSet,
@@ -56,6 +58,7 @@ import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
+  fkEdge: FkEdge,
 }
 
 const KBD_STYLE: React.CSSProperties = {
@@ -280,6 +283,7 @@ export default function Canvas() {
   const activeViewKey = useWorkspaceStore((s) => s.activeViewKey)
   const expandedElementIds = useWorkspaceStore((s) => s.expandedElementIds)
   const tableData = useWorkspaceStore((s) => s.tableData)
+  const fkEdgesState = useWorkspaceStore((s) => s.fkEdges)
   const selectElements = useWorkspaceStore((s) => s.selectElements)
   const multiSelectMode = useWorkspaceStore((s) => s.multiSelectMode)
   const selectRelationship = useWorkspaceStore((s) => s.selectRelationship)
@@ -492,6 +496,7 @@ export default function Canvas() {
         onDrillIn: stableDrillInto,
         viewCountMap,
         tableData,
+        fkEdges: fkEdgesState,
       }
       // Sizing pass: how much each top-level expanded box grows vs 200×100.
       const { growth } = expandComposite(laidOut, expandCtx)
@@ -553,12 +558,24 @@ export default function Canvas() {
     // 5. Build final edges using post-layout positions for handle routing.
     //    When anything is expanded, re-target relationships onto nearest visible
     //    ancestors (bundling fan-in to collapsed siblings).
-    const edges = expandedElementIds.length > 0
+    const modelEdges = expandedElementIds.length > 0
       ? buildCompositeEdges(workspace, allNodes, highlightFilters, tableData)
       : buildEdges(workspace, view, allNodes, highlightFilters)
 
+    // 5b. FK edges between table nodes inside expanded Database containers.
+    let fkEdges: Edge[] = []
+    for (const cid of expandedElementIds) {
+      const tables = tableData[cid]
+      const manual = fkEdgesState[cid]
+      if (tables && tables.length > 0) {
+        const built = buildTableEdges(cid, tables, manual)
+        fkEdges = fkEdges.concat(built)
+      }
+    }
+    const edges = [...modelEdges, ...fkEdges]
+
     return { initialNodes: allNodes, initialEdges: edges }
-  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableData])
+  }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableData, fkEdgesState])
 
   // Canonicalize the initial dagre layout: write computed positions back to
   // view.elements for any element that doesn't already have a saved x/y.
@@ -1372,6 +1389,17 @@ export default function Canvas() {
               orient="auto-start-reverse"
             >
               <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--canvas-selection, var(--color-accent))" />
+            </marker>
+            <marker
+              id="c4-arrow-fk"
+              viewBox="0 0 10 10"
+              refX="10"
+              refY="5"
+              markerWidth={8}
+              markerHeight={8}
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-fk-edge, #6366f1)" />
             </marker>
             <marker
               id="c4-dot"

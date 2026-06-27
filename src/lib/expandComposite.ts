@@ -11,7 +11,7 @@
 
 import dagre from '@dagrejs/dagre'
 import type { Node } from '@xyflow/react'
-import type { ModelElement, Relationship, TableDef } from '@/types/model'
+import type { ModelElement, Relationship, TableDef, FkEdgeDef } from '@/types/model'
 import {
   getChildElements,
   buildContentNode,
@@ -42,6 +42,8 @@ export interface ExpandContext extends ContentNodeContext {
   relationships: Relationship[]
   /** Database table definitions (sidecar-only), keyed by container ID. */
   tableData: Record<string, TableDef[]>
+  /** FK edge definitions (sidecar-only), keyed by container ID. */
+  fkEdges: Record<string, FkEdgeDef[]>
 }
 
 interface Subtree {
@@ -112,6 +114,18 @@ function layoutSubtree(element: ModelElement, ctx: ExpandContext): Subtree {
   for (const rel of ctx.relationships) {
     if (childIds.has(rel.sourceId) && childIds.has(rel.destinationId)) {
       g.setEdge(rel.sourceId, rel.destinationId)
+    }
+  }
+  // FK edges between table nodes: wire manual FK edges into dagre so layout
+  // accounts for foreign key relationships between tables.
+  const manualEdges = ctx.fkEdges[element.id]
+  if (manualEdges && manualEdges.length > 0) {
+    for (const fk of manualEdges) {
+      const srcId = tableNodeId(element.id, fk.sourceTableId)
+      const tgtId = tableNodeId(element.id, fk.targetTableId)
+      if (childIds.has(srcId) && childIds.has(tgtId)) {
+        g.setEdge(srcId, tgtId)
+      }
     }
   }
   dagre.layout(g)

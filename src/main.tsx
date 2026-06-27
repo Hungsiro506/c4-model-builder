@@ -79,6 +79,18 @@ if (import.meta.env.DEV) {
       ...ws.views.componentViews.map(v => ({ key: v.key, type: v.type, title: v.title ?? v.key })),
     ]
   }
+  ;(window as unknown as Record<string, unknown>).__testAddTable = (containerId: string, name: string) => {
+    return useWorkspaceStore.getState().addTable(containerId, name)
+  }
+  ;(window as unknown as Record<string, unknown>).__testAddColumn = (containerId: string, tableId: string, name: string, type: string) => {
+    return useWorkspaceStore.getState().addColumn(containerId, tableId, name, type)
+  }
+  ;(window as unknown as Record<string, unknown>).__testAddFkEdge = (containerId: string, sourceTableId: string, targetTableId: string, sourceColumnId?: string) => {
+    return useWorkspaceStore.getState().addFkEdge(containerId, sourceTableId, targetTableId, sourceColumnId)
+  }
+  ;(window as unknown as Record<string, unknown>).__testUpdateColumn = (containerId: string, tableId: string, columnId: string, patch: Record<string, boolean | string>) => {
+    useWorkspaceStore.getState().updateColumn(containerId, tableId, columnId, patch)
+  }
 }
 
 // Global unhandled error handlers.

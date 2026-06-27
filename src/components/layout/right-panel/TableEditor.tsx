@@ -14,14 +14,18 @@ interface TableEditorProps {
 
 export default function TableEditor({ containerId, tableId, onClose }: TableEditorProps) {
   const tableData = useWorkspaceStore((s) => s.tableData[containerId]) ?? EMPTY_TABLE_LIST
+  const fkEdges = useWorkspaceStore((s) => s.fkEdges[containerId]) ?? []
   const updateTable = useWorkspaceStore((s) => s.updateTable)
   const deleteTable = useWorkspaceStore((s) => s.deleteTable)
   const addColumn = useWorkspaceStore((s) => s.addColumn)
   const updateColumn = useWorkspaceStore((s) => s.updateColumn)
   const deleteColumn = useWorkspaceStore((s) => s.deleteColumn)
-  // Each column now stores an id. We find it by index when updating.
+  const addFkEdge = useWorkspaceStore((s) => s.addFkEdge)
+  const updateFkEdge = useWorkspaceStore((s) => s.updateFkEdge)
+  const deleteFkEdge = useWorkspaceStore((s) => s.deleteFkEdge)
 
   const table = tableData.find((t) => t.id === tableId)
+  const otherTables = tableData.filter((t: { id: string }) => t.id !== tableId)
   const [newColName, setNewColName] = useState('')
   const [newColType, setNewColType] = useState('varchar')
 
@@ -119,7 +123,17 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
 
         {table.columns.map((col, i) => {
           const colId = 'id' in col ? (col as { id: string }).id : `${i}`
+          // FK target data (computed outside JSX to avoid IIFE parse errors)
+          const fkEdge = fkEdges.find(
+            e => e.sourceTableId === tableId && e.sourceColumnId === colId,
+          )
+          const targetTableId = fkEdge?.targetTableId ?? ''
+          const targetTable = targetTableId
+            ? tableData.find((t: { id: string }) => t.id === targetTableId)
+            : undefined
+          const targetColumns = (targetTable as { columns: typeof table.columns } | undefined)?.columns ?? []
           return (
+            <>
             <div key={colId} className="flex items-center gap-1.5 px-3 py-1 hover:bg-white/[0.03]">
               {/* PK toggle */}
               <button
@@ -131,6 +145,28 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                 aria-label={`Toggle primary key for ${col.name || `col_${i + 1}`}`}
               >
                 PK
+              </button>
+
+              {/* FK toggle */}
+              <button
+                onClick={() => {
+                  const newVal = !col.isForeignKey
+                  updateColumn(containerId, tableId, colId as string, { isForeignKey: newVal })
+                  if (!newVal) {
+                    // Remove FK edges referencing this column
+                    const colEdges = fkEdges.filter(
+                      e => e.sourceTableId === tableId && e.sourceColumnId === colId,
+                    )
+                    for (const e of colEdges) deleteFkEdge(containerId, e.id)
+                  }
+                }}
+                className={`w-5 h-5 rounded flex items-center justify-center text-xxs ${
+                  col.isForeignKey ? 'text-indigo-400 bg-indigo-400/10' : 'text-muted hover:bg-white/5'
+                }`}
+                title={col.isForeignKey ? 'Foreign Key (click to remove)' : 'Set as Foreign Key'}
+                aria-label={`Toggle foreign key for ${col.name || `col_${i + 1}`}`}
+              >
+                FK
               </button>
 
               {/* Name */}
@@ -162,6 +198,58 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                 <Trash2 size={11} />
               </button>
             </div>
+            {/* FK target picker */}
+            {col.isForeignKey && (
+              <div className="flex items-center gap-1 px-3 pb-1" style={{ paddingLeft: 54 }}>
+                <span className="text-xxs" style={{ color: 'var(--color-text-muted)' }}>→</span>
+                <select
+                  key={`fk-tgt-${colId}-${targetTableId || 'none'}`}
+                  value={targetTableId}
+                  onChange={(e) => {
+                    const newTgt = e.target.value
+                    if (!newTgt) {
+                      if (fkEdge) deleteFkEdge(containerId, fkEdge.id)
+                      updateColumn(containerId, tableId, colId as string, { isForeignKey: false })
+                      return
+                    }
+                    if (fkEdge) {
+                      updateFkEdge(containerId, fkEdge.id, { targetTableId: newTgt, targetColumnId: undefined })
+                    } else {
+                      addFkEdge(containerId, tableId, newTgt, colId)
+                    }
+                  }}
+                  className="text-xxs rounded px-1 py-0.5"
+                  style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }}
+                >
+                  <option value="">Select table...</option>
+                  {otherTables.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {!!targetTableId && (
+                  <select
+                    key={`fk-col-${colId}-${fkEdge?.targetColumnId || 'any'}`}
+                    value={fkEdge?.targetColumnId ?? ''}
+                    onChange={(e) => {
+                      const newCol = e.target.value || undefined
+                      if (fkEdge) {
+                        updateFkEdge(containerId, fkEdge.id, { targetColumnId: newCol })
+                      }
+                    }}
+                    className="text-xxs rounded px-1 py-0.5"
+                    style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }}
+                  >
+                    <option value="">Select column...</option>
+                    {targetColumns.map(c => (
+                      <option key={c.id ?? c.name} value={c.id ?? c.name}>
+                        {c.name} {c.isPrimaryKey ? '(PK)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+          </>
           )
         })}
       </div>

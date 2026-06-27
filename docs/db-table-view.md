@@ -6,7 +6,8 @@ Keep current as the feature changes.
 > Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
 > **PR B1 merged** (2026-06-25). Branch `feat/db-table-view-b1` (PR #23).
 > **PR B2 merged** (2026-06-25). Branch `feat/db-table-view-b2` (PR #24).
-> PR B2.5 next (FK edges). PR B3 deferred (Mermaid overlay).
+> **PR B2.5 submitted** (2026-06-26). Branch `feat/db-table-view-b2.5` (PR #25).
+> PR B3 deferred (Mermaid overlay).
 
 ## Problem
 
@@ -93,7 +94,7 @@ documentation, not just draw a cylinder and move on.
 
 ## Open items (deferred)
 
-- FK edge rendering between table nodes
+- ~~FK edge rendering between table nodes~~ (done, PR #25)
 - Undo support for table edits
 - SQL DDL import / `DatabaseProvider` interface
 - Table highlight/fade participation
@@ -188,3 +189,45 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
   expand pipeline integration, Mermaid overlay, RightPanel table editor
 - Mockup: `docs/mockups/db-diagram-panel.html`
 - Plan: see SCALING-DESIGN.md §3 (Database table view)
+
+### 2026-06-26 — PR B2.5 submitted (PR #25)
+- FK resolver: naming-convention matching (`customer_id` → `customers.id`)
+- `buildTableEdges()`: React Flow edges with thin dashed indigo style + FK column labels
+- `FkEdge.tsx`: dedicated edge component
+- Dagre wiring: FK edges participate in layout so tables arrange by FK relationships
+- FK toggle per column in TableEditor (indigo badge next to PK)
+- 9 new tests. To be squash-merged as `feat: add foreign key edges between database tables`.
+
+### Implementation decisions (from PR #25)
+
+1. **FK edges are editor-only, no drag-to-connect.** Drag-to-connect was tried then removed
+   — the UX is fiddly on small table nodes. Column editor dropdowns are simpler and more
+   explicit. TableNode has hidden handles only for ReactFlow edge routing (error #008).
+
+2. **Auto-resolution disabled.** Naming convention (`customer_id` → `customers.id`) was
+   initially built but removed. User must explicitly pick target table from dropdown.
+   `resolveTableFKs()` still exists but is unused in the rendering pipeline.
+
+3. **Column IDs use `crypto.randomUUID()` (UUID v7), not `nanoid`.** Table/column/FK-edge
+   IDs are sidecar-only (never in DSL), so hyphens are safe. Model-level element IDs still
+   use `nanoid` (no hyphens, valid DSL identifiers).
+
+4. **FK matching uses column IDs only, never names.** Column names can have whitespace
+   and follow no pattern. `col.id` is the only lookup key.
+
+5. **`FkEdgeDef` stored as `fkEdges: Record<string, FkEdgeDef[]>` keyed by containerId.**
+   Same pattern as `tableData`. Persisted in sidecar under `fkEdges` field. Container-scoped
+   — same table name in different DB containers = different tables, no overlap.
+
+6. **No FK cascade on table/column delete.** Reading `s.fkEdges` inside immer `set()`
+   callbacks caused a ~20s E2E performance regression even when the field was empty `{}`.
+   Immer draft reads create proxy overhead — harmless but expensive in aggregate. Orphaned
+   FK edges are silent no-ops: `buildTableEdges` skips them when source/target tables
+   don't exist.
+
+7. **FK toggle just marks the column.** Edge only created when user picks target table
+   from dropdown (or via `addFkEdge`). This avoids auto-creating edges with wrong targets.
+
+8. **`sourceHandle`/`targetHandle` required on every FK edge.** ReactFlow needs handles
+   to exist on source/target nodes for edge routing (error #008). TableNode provides
+   invisible `bottom-source`/`top-target` handles — no UI, just routing anchors.
