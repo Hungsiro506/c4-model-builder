@@ -1263,14 +1263,6 @@ export default function Canvas() {
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       if (newConnection.source && newConnection.target) {
-        // FK edges: allow handle changes on same table nodes, block cross-table reconnect
-        if (oldEdge.id.startsWith('__fk_manual__')) {
-          if (newConnection.source === oldEdge.source && newConnection.target === oldEdge.target) {
-            setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
-          }
-          return
-        }
-
         if (!canConnectElements(workspaceRef.current, newConnection.source, newConnection.target)) return
         reconnectRelationship(oldEdge.id, newConnection.source, newConnection.target)
         setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
