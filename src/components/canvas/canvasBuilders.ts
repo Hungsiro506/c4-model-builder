@@ -1170,8 +1170,6 @@ export function buildTableEdges(
       },
       selectable: false,
       focusable: false,
-      reconnectable: false,
-      interactionWidth: 0,
       zIndex: 3,
     })
   }
