@@ -1,8 +1,8 @@
 # c4hero Scaling Design
 
-> Status: **Active development** (last updated 2026-06-22). Pillars 1 (expand-in-place)
-> and 2 (storage seam) are shipped. Pillars 3–4 are design-phase. New UX improvements
-> are being scoped in §10 (Canvas & Edge UX).
+> Status: **Active development** (last updated 2026-06-28). Pillars 1 (expand-in-place
+> L2→L3 + DB table view) and 2 (storage seam) are shipped. Pillars 3–4 are design-phase.
+> Export-PNG feature planned (§10).
 >
 > This document captures the vision, the decisions, and — most importantly — *why* we
 > made them, so the work can be picked up and extended later.
@@ -50,7 +50,7 @@ shove in proprietary data, we lose the one thing that makes c4hero worth choosin
 
 ---
 
-## 3. Pillar 1 — Expand-in-place zoom ⚡ *partially built — L2→L3 done, L4 (code) + DB table view pending*
+## 3. Pillar 1 — Expand-in-place zoom ⚡ *L2→L3 + DB table view done, L4 (code) pending*
 
 ### What
 The app starts at the context diagram. Clicking one system expands it **in place** into its
@@ -93,13 +93,16 @@ visible while zooming is the whole point of the request.
 5. Code level via a `CodeProvider`.
 
 Steps 1–4 are shipped. **Step 5 (code level) is deferred** — requires a
-`CodeProvider` from Pillar 3 (code-from-source generation). Also deferred:
-- **Database table view** — expand a Database container to show its table
-  schema inline (similar to code level but schema-first). Needs a
-  `DatabaseProvider` that reads table definitions from the model or from
-  an external schema source.
+`CodeProvider` from Pillar 3 (code-from-source generation).
 - **L4 Code zoom** — expand a Component to show its code-level diagram
   (classes, functions, files). This is Pillar 1 step 5 + Pillar 3 combined.
+
+**Database table view — shipped (2026-06-25 → 2026-06-28, PRs #18–#27):**
+  Expand a Database container to show tables as nodes with columns, PK/FK
+  indicators, and FK edges between them. Tables are sidecar-only (never in
+  DSL). FK edges are interactive (drag endpoints, switch line style) and
+  auto-resolved from `isForeignKey` columns via naming convention. See
+  `docs/db-table-view.md` for full details.
 
 ---
 
@@ -319,9 +322,30 @@ exposing a simple per-element picker.
 **Status:** not scoped for build yet. Needs a dedicated design doc to resolve
 the tag-only vs per-element tension.
 
+### Export selected as PNG
+
+**What:** select one or more nodes (click, shift+click, rubber-band) → export
+them + edges between them as a transparent PNG. Like Excalidraw's export.
+
+**Scope:** off-screen render with `html-to-image` library, download triggered
+from toolbar button. Single PR. See `docs/export-png.md` for full plan.
+
+**Status:** planned (2026-06-28). Not yet started.
+
 ---
 
 ## 11. Progress log
+
+### 2026-06-28
+
+- **Database table view shipped** — PRs #18–#27 merged (2026-06-25 → 2026-06-28).
+  Tables render as nodes inside expanded Database containers. FK edges between tables
+  (auto-resolved + manual), interactive (drag endpoints, switch line style). Tables
+  draggable, positions persist. Full UI for table/column/FK CRUD. See
+  `docs/db-table-view.md` for full details.
+- **Export-PNG feature planned** — `docs/export-png.md` created. Scope locked: multi-select
+  nodes + edges, transparent PNG, 1x, off-screen render with `html-to-image`.
+  Not yet started.
 
 ### 2026-06-22
 
