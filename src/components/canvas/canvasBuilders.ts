@@ -912,7 +912,7 @@ export function buildTableNode(
     position,
     zIndex: 5, // above boundary overlays (-5..0 range) so clicks reach the table
     selectable: false, // tables use custom onClick, not React Flow selection
-    draggable: false,
+    draggable: true,
     data: {
       tableDef,
       containerId,
@@ -1155,8 +1155,8 @@ export function buildTableEdges(
       id: `__fk_manual__${containerId}__${fk.id}`,
       source: tableNodeId(containerId, fk.sourceTableId),
       target: tableNodeId(containerId, fk.targetTableId),
-      sourceHandle: 'bottom-source',
-      targetHandle: 'top-target',
+      sourceHandle: 'bottom-b-source',
+      targetHandle: 'top-b-target',
       type: 'fkEdge',
       data: {
         label: sourceCol?.name ?? '',
@@ -1170,6 +1170,7 @@ export function buildTableEdges(
       },
       selectable: false,
       focusable: false,
+      reconnectable: false,
       zIndex: 3,
     })
   }

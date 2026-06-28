@@ -6,8 +6,9 @@ Keep current as the feature changes.
 > Status: **PR A merged** (2026-06-25). Branch `feat/db-table-view-foundation` (PR #18).
 > **PR B1 merged** (2026-06-25). Branch `feat/db-table-view-b1` (PR #23).
 > **PR B2 merged** (2026-06-25). Branch `feat/db-table-view-b2` (PR #24).
-> **PR B2.5 submitted** (2026-06-26). Branch `feat/db-table-view-b2.5` (PR #25).
-> PR B3 deferred (Mermaid overlay).
+> **PR B2.5 merged** (2026-06-26). Branch `feat/db-table-view-b2.5` (PR #25).
+> **PR table-drag submitted** (2026-06-26). Branch `feat/table-drag` (PR #26).
+> PR B3 deferred (Mermaid overlay). PR FK-edge-interaction next session.
 
 ## Problem
 
@@ -95,6 +96,8 @@ documentation, not just draw a cylinder and move on.
 ## Open items (deferred)
 
 - ~~FK edge rendering between table nodes~~ (done, PR #25)
+- ~~Table node dragging inside DB container~~ (done, PR #26)
+- FK edge path adjustment (drag endpoints to different handles) — next session
 - Undo support for table edits
 - SQL DDL import / `DatabaseProvider` interface
 - Table highlight/fade participation
@@ -190,7 +193,7 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - Mockup: `docs/mockups/db-diagram-panel.html`
 - Plan: see SCALING-DESIGN.md §3 (Database table view)
 
-### 2026-06-26 — PR B2.5 submitted (PR #25)
+### 2026-06-26 — PR B2.5 merged (PR #25)
 - FK resolver: naming-convention matching (`customer_id` → `customers.id`)
 - `buildTableEdges()`: React Flow edges with thin dashed indigo style + FK column labels
 - `FkEdge.tsx`: dedicated edge component
@@ -231,3 +234,11 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 8. **`sourceHandle`/`targetHandle` required on every FK edge.** ReactFlow needs handles
    to exist on source/target nodes for edge routing (error #008). TableNode provides
    invisible `bottom-source`/`top-target` handles — no UI, just routing anchors.
+
+### 2026-06-26 — PR table-drag submitted (PR #26)
+- Table nodes now draggable inside expanded Database container boundaries
+- `buildTableNode`: `draggable: true`
+- `isExpandedChildNode`: recognizes `node.type === 'table'` so drag positions persist
+- Positions saved to `view.expandedLayout` (sidecar-persistent, survive reload)
+- FK edges set `reconnectable: false` — non-interactive for now
+- 1 unit test added. To be squash-merged as `feat: make table nodes draggable`.

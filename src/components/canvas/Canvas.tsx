@@ -169,6 +169,8 @@ function isExpandedChildNode(
   expandedIds: Set<string>,
 ): boolean {
   if (expandedIds.size === 0 || isOverlayNode(node)) return false
+  // Table nodes are synthetic children of expanded Database containers
+  if (node.type === 'table') return true
   if (!node.data || !('element' in node.data)) return false
   return !(view?.elements.some((e) => e.id === node.id) ?? false)
 }
