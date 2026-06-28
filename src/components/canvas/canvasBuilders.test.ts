@@ -454,4 +454,64 @@ describe('buildTableEdges', () => {
     const edges = buildTableEdges('db1', tables, [manualEdge])
     expect(edges[0].data).toMatchObject({ label: 'customer_id' })
   })
+
+  it('uses computeHandlePair for dynamic handle selection when positions provided', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    // Source (t2/orders) is to the right of target (t1/customers)
+    // → dominant axis is horizontal, dx < 0 → sourceHandle: left-b-source, targetHandle: right-b-target
+    const posMap = new Map<string, { x: number; y: number }>()
+    posMap.set('__table__db1__t2', { x: 400, y: 100 })  // source — right
+    posMap.set('__table__db1__t1', { x: 0, y: 100 })    // target — left
+    const edges = buildTableEdges('db1', tables, [manualEdge], posMap)
+    expect(edges).toHaveLength(1)
+    expect(edges[0].sourceHandle).toBe('left-b-source')
+    expect(edges[0].targetHandle).toBe('right-b-target')
+  })
+
+  it('falls back to bottom/top handles when positions not provided', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges).toHaveLength(1)
+    expect(edges[0].sourceHandle).toBe('bottom-b-source')
+    expect(edges[0].targetHandle).toBe('top-b-target')
+  })
+
+  it('FK edges are reconnectable for handle interactivity', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges[0].reconnectable).toBe(true)
+  })
 })

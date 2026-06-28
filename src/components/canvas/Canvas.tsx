@@ -565,12 +565,14 @@ export default function Canvas() {
       : buildEdges(workspace, view, allNodes, highlightFilters)
 
     // 5b. FK edges between table nodes inside expanded Database containers.
+    // Pass node positions so buildTableEdges can compute optimal handle sides.
+    const nodePosMap = new Map(allNodes.map(n => [n.id, n.position]))
     let fkEdges: Edge[] = []
     for (const cid of expandedElementIds) {
       const tables = tableData[cid]
       const manual = fkEdgesState[cid]
       if (tables && tables.length > 0) {
-        const built = buildTableEdges(cid, tables, manual)
+        const built = buildTableEdges(cid, tables, manual, nodePosMap)
         fkEdges = fkEdges.concat(built)
       }
     }
@@ -1263,6 +1265,13 @@ export default function Canvas() {
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       if (newConnection.source && newConnection.target) {
+        // FK edges: allow same-node handle changes, block cross-table reconnection.
+        // Only the handle attachment point changes — the FK relationship stays fixed.
+        if (oldEdge.type === 'fkEdge') {
+          if (newConnection.source !== oldEdge.source || newConnection.target !== oldEdge.target) return
+          setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
+          return
+        }
         if (!canConnectElements(workspaceRef.current, newConnection.source, newConnection.target)) return
         reconnectRelationship(oldEdge.id, newConnection.source, newConnection.target)
         setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
