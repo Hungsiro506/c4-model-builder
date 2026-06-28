@@ -490,4 +490,48 @@ describe('buildTableEdges', () => {
     const edges = buildTableEdges('db1', tables, [manualEdge])
     expect(edges[0].reconnectable).toBe(true)
   })
+
+  it('auto-resolves FK edges from isForeignKey columns via naming convention', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    // No manual edges — auto-resolution should create the FK edge
+    const edges = buildTableEdges('db1', tables, undefined)
+    expect(edges).toHaveLength(1)
+    expect(edges[0].id).toContain('__fk_auto__')
+    expect(edges[0].source).toBe('__table__db1__t2')
+    expect(edges[0].target).toBe('__table__db1__t1')
+    expect(edges[0].data).toMatchObject({ label: 'customer_id' })
+  })
+
+  it('manual FK edges override auto-resolved edges for same pair', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    // Manual edge for same source→target as auto-resolved
+    const manualOverride = { id: 'fe1', sourceTableId: 't2', targetTableId: 't1', sourceColumnId: 'col-custom' }
+    const edges = buildTableEdges('db1', tables, [manualOverride])
+    expect(edges).toHaveLength(1)
+    expect(edges[0].id).toContain('__fk_manual__') // manual wins
+  })
 })

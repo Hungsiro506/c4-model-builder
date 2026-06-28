@@ -1131,9 +1131,9 @@ export function resolveTableFKs(tables: TableDef[]): FKEdgePair[] {
 }
 
 /** Build React Flow edges between table nodes for FK relationships.
- *  Merges auto-resolved edges (naming convention) with manual FK edges.
- *  Manual edges take priority — if both produce the same source→target, the
- *  auto edge is dropped. */
+ *  Auto-resolves FK edges from isForeignKey columns via naming convention,
+ *  then layers manual FK edges on top. Manual edges override auto edges
+ *  for the same source→target pair. */
 export function buildTableEdges(
   containerId: string,
   tables: TableDef[],
@@ -1141,7 +1141,43 @@ export function buildTableEdges(
 ): Edge[] {
   const edges: Edge[] = []
 
-  // Manual FK edges (only — auto-resolution disabled)
+  // Track which source→target pairs already have an edge (dedup)
+  const seenPairs = new Set<string>()
+
+  // 1. Auto-resolved edges from isForeignKey columns via naming convention
+  const autoPairs = resolveTableFKs(tables)
+  for (const pair of autoPairs) {
+    const sourceTable = tables.find(t => t.id === pair.sourceTableId)
+    if (!sourceTable) continue
+    const sourceCol = sourceTable.columns.find(c => (c.id ?? c.name) === pair.sourceColumnId)
+    const key = `${pair.sourceTableId}->${pair.targetTableId}`
+    seenPairs.add(key)
+
+    edges.push({
+      id: `__fk_auto__${containerId}__${pair.sourceTableId}__${pair.targetTableId}`,
+      source: tableNodeId(containerId, pair.sourceTableId),
+      target: tableNodeId(containerId, pair.targetTableId),
+      sourceHandle: 'bottom-b-source',
+      targetHandle: 'top-b-target',
+      type: 'fkEdge',
+      data: {
+        label: sourceCol?.name ?? '',
+        sourceColumnId: pair.sourceColumnId,
+        targetColumnId: pair.targetColumnId,
+      },
+      style: {
+        stroke: 'var(--color-fk-edge, #6366f1)',
+        strokeDasharray: '6 3',
+        strokeWidth: 1.5,
+      },
+      selectable: false,
+      focusable: false,
+      reconnectable: true,
+      zIndex: 3,
+    })
+  }
+
+  // 2. Manual FK edges — override auto edges for same source→target
   for (const fk of manualFkEdges ?? []) {
     const sourceTable = tables.find(t => t.id === fk.sourceTableId)
     if (!sourceTable) continue // orphan: source table deleted
@@ -1150,6 +1186,15 @@ export function buildTableEdges(
     const sourceCol = fk.sourceColumnId
       ? sourceTable.columns.find(c => (c.id ?? c.name) === fk.sourceColumnId)
       : undefined
+
+    const key = `${fk.sourceTableId}->${fk.targetTableId}`
+    // Remove auto-edge for same pair (manual overrides)
+    if (seenPairs.has(key)) {
+      const autoId = `__fk_auto__${containerId}__${fk.sourceTableId}__${fk.targetTableId}`
+      const idx = edges.findIndex(e => e.id === autoId)
+      if (idx !== -1) edges.splice(idx, 1)
+    }
+    seenPairs.add(key)
 
     edges.push({
       id: `__fk_manual__${containerId}__${fk.id}`,
