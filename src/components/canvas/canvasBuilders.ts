@@ -1,4 +1,4 @@
-import type { Node, Edge } from '@xyflow/react'
+import type { Node, Edge, Connection } from '@xyflow/react'
 import { isHighlighted, isHighlightedRel, highlightActive, type HighlightFilters } from '@/lib/highlight'
 import { stripThemeManagedStyleFields } from '@/lib/themes'
 import { buildElementMap, buildRelationshipMap } from '@/store/workspace'
@@ -1138,6 +1138,22 @@ const FK_EDGE_STYLE: RelationshipStyle = {
   color: 'var(--color-fk-edge, #6366f1)',
   thickness: 1.5,
   dashed: true,
+}
+
+/** Reconnect decision for an FK edge drag. Returns:
+ *  - 'block' — cross-table reconnect (source or target node changed)
+ *  - 'reconnect-handle' — same-node handle change (call reconnectEdge)
+ *  - 'full-reconnect' — not an FK edge (fall through to model reconnect) */
+export function fkReconnectDecision(
+  oldEdge: Pick<Edge, 'source' | 'target' | 'data'>,
+  newConnection: Pick<Connection, 'source' | 'target'>,
+): 'block' | 'reconnect-handle' | 'full-reconnect' {
+  const isFk = (oldEdge.data as { isFk?: boolean } | undefined)?.isFk
+  if (!isFk) return 'full-reconnect'
+  if (newConnection.source !== oldEdge.source || newConnection.target !== oldEdge.target) {
+    return 'block'
+  }
+  return 'reconnect-handle'
 }
 
 /** Build React Flow edges between table nodes for FK relationships.

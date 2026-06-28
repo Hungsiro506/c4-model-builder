@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNodes, isDatabaseContainer, tableNodeId, getTableNodeSize, buildTableNode, buildParentMap, resolveTableFKs, buildTableEdges } from './canvasBuilders'
+import { buildNodes, isDatabaseContainer, tableNodeId, getTableNodeSize, buildTableNode, buildParentMap, resolveTableFKs, buildTableEdges, fkReconnectDecision } from './canvasBuilders'
 import type { HighlightFilters } from '@/lib/highlight'
 import { THEMES } from '@/lib/themes'
 import type { ElementStyle, Workspace, Container, SoftwareSystem, Person, Component, TableDef, ModelElement } from '@/types/model'
@@ -619,5 +619,66 @@ describe('buildTableEdges', () => {
     const edges = buildTableEdges('db1', tables, [manualOverride])
     expect(edges).toHaveLength(1)
     expect(edges[0].id).toContain('__fk_manual__')
+  })
+})
+
+// ─── fkReconnectDecision ────────────────────────────────────────────
+
+describe('fkReconnectDecision', () => {
+  const fkEdge = {
+    source: 'node-a',
+    target: 'node-b',
+    data: { isFk: true },
+  }
+
+  const modelEdge = {
+    source: 'node-a',
+    target: 'node-b',
+    data: { relationship: { id: 'rel-1' } },
+  }
+
+  it('returns full-reconnect for non-FK (model relationship) edges', () => {
+    expect(fkReconnectDecision(modelEdge, { source: 'node-a', target: 'node-c' }))
+      .toBe('full-reconnect')
+  })
+
+  it('returns full-reconnect when edge data has no isFk flag', () => {
+    expect(fkReconnectDecision(
+      { source: 'a', target: 'b', data: {} },
+      { source: 'a', target: 'b' },
+    )).toBe('full-reconnect')
+  })
+
+  it('returns full-reconnect when edge data is undefined', () => {
+    expect(fkReconnectDecision(
+      { source: 'a', target: 'b', data: undefined },
+      { source: 'a', target: 'b' },
+    )).toBe('full-reconnect')
+  })
+
+  it('returns reconnect-handle for FK edge with unchanged source and target', () => {
+    expect(fkReconnectDecision(fkEdge, { source: 'node-a', target: 'node-b' }))
+      .toBe('reconnect-handle')
+  })
+
+  it('returns block when FK edge source changes (cross-table)', () => {
+    expect(fkReconnectDecision(fkEdge, { source: 'node-c', target: 'node-b' }))
+      .toBe('block')
+  })
+
+  it('returns block when FK edge target changes (cross-table)', () => {
+    expect(fkReconnectDecision(fkEdge, { source: 'node-a', target: 'node-c' }))
+      .toBe('block')
+  })
+
+  it('returns block when both source and target change', () => {
+    expect(fkReconnectDecision(fkEdge, { source: 'node-c', target: 'node-d' }))
+      .toBe('block')
+  })
+
+  it('returns reconnect-handle when only handle changes (same source/target nodes)', () => {
+    // ReactFlow reconnectEdge only changes handles, source/target stay same
+    expect(fkReconnectDecision(fkEdge, { source: 'node-a', target: 'node-b' }))
+      .toBe('reconnect-handle')
   })
 })

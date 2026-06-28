@@ -37,6 +37,7 @@ import {
   buildEdges,
   buildCompositeEdges,
   buildTableEdges,
+  fkReconnectDecision,
   buildGroupNodes,
   buildBoundaryNodes,
   buildDrillableSet,
@@ -1263,9 +1264,9 @@ export default function Canvas() {
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       if (newConnection.source && newConnection.target) {
-        // FK edges: allow same-node handle changes, block cross-table reconnection.
-        if ((oldEdge.data as { isFk?: boolean })?.isFk) {
-          if (newConnection.source !== oldEdge.source || newConnection.target !== oldEdge.target) return
+        const decision = fkReconnectDecision(oldEdge, newConnection)
+        if (decision === 'block') return
+        if (decision === 'reconnect-handle') {
           setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
           return
         }
