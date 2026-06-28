@@ -68,6 +68,7 @@ interface SidecarFkEdge {
   targetTableId: string
   sourceColumnId?: string
   targetColumnId?: string
+  lineStyle?: string
 }
 
 export interface SidecarData {
@@ -240,6 +241,7 @@ export function extractSidecar(
           targetTableId: e.targetTableId,
           ...(e.sourceColumnId !== undefined ? { sourceColumnId: e.sourceColumnId } : {}),
           ...(e.targetColumnId !== undefined ? { targetColumnId: e.targetColumnId } : {}),
+          ...(e.lineStyle !== undefined ? { lineStyle: e.lineStyle } : {}),
         }))
         hasData = true
       }
@@ -365,6 +367,7 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): {
         targetTableId: e.targetTableId,
         sourceColumnId: e.sourceColumnId,
         targetColumnId: e.targetColumnId,
+        lineStyle: e.lineStyle as FkEdgeDef['lineStyle'],
       }))
     }
   }
