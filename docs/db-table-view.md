@@ -8,7 +8,7 @@ Keep current as the feature changes.
 > **PR B2 merged** (2026-06-25). Branch `feat/db-table-view-b2` (PR #24).
 > **PR B2.5 merged** (2026-06-26). Branch `feat/db-table-view-b2.5` (PR #25).
 > **PR table-drag submitted** (2026-06-26). Branch `feat/table-drag` (PR #26).
-> PR B3 deferred (Mermaid overlay). PR FK-edge-interact submitted (2026-06-28). Branch `feat/fk-edge-interact` (PR #27).
+> PR B3 deferred (Mermaid overlay). PR FK-edge-interact submitted (2026-06-28). Branch `feat/fk-edge-interact` (PR #27) — ready for review.
 
 ## Problem
 
@@ -242,3 +242,44 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - Positions saved to `view.expandedLayout` (sidecar-persistent, survive reload)
 - FK edges set `reconnectable: false` — non-interactive for now
 - 1 unit test added. To be squash-merged as `feat: make table nodes draggable`.
+
+### 2026-06-28 — PR FK-edge-interact (PR #27) — in review
+
+**What changed (7 commits):**
+- `TableNode.tsx`: hidden handles → `<NodeHandles />` (24 handles, 4 sides, hover-visible)
+- `canvasBuilders.ts`:
+  - `buildTableEdges` auto-resolves FK edges from `isForeignKey` columns via `resolveTableFKs`
+  - FK edges use `type: 'relationship'` + `RelationshipEdge` (same component as C4 model edges)
+  - `computeHandlePair` for dynamic initial handle placement
+  - Default `lineStyle: 'Orthogonal'` (ERD convention, clean in dense layouts)
+  - `reconnectable: true`, `interactionWidth: 20`
+  - `fkReconnectDecision()` pure function — extracted from Canvas for testability
+- `Canvas.tsx`:
+  - Passes node position map to `buildTableEdges`
+  - `onReconnect` delegates FK detection to `fkReconnectDecision`
+  - `FkEdge` removed from `edgeTypes` (dead code)
+- `FkEdge.tsx`: **deleted** — no longer used
+- `model.ts`: `lineStyle?: LineStyle` added to `FkEdgeDef`
+- `table-slice.ts`: `updateFkEdge` accepts `lineStyle`
+- `sidecar.ts`: `SidecarFkEdge` gets `lineStyle`, extract/apply round-trip
+- `TableEditor.tsx`:
+  - FK toggle auto-creates FK edge via naming convention (auto-resolve on click)
+  - FK dropdown falls back to `resolveTableFKs` when no persisted edge exists (survives reload)
+  - Column picker creates FK edge on-the-fly when auto-resolved target selected
+
+**Tests added:**
+- `Canvas.test.ts` — 3 tests: contract verification (FK edges carry `isFk`, model edges don't)
+- `canvasBuilders.test.ts` — 11 new tests: handle computation, reconnectable, auto-resolution, lineStyle, `isFk` flag, `fkReconnectDecision` branches
+- `TableEditor.test.tsx` — 6 tests: FK target lookup fallback (persisted → auto → none)
+- `fk-edge-interact.spec.ts` — 3 E2E: edge render, reconnect block, auto-resolution
+- `fk-dropdown.spec.ts` — 1 E2E (existing): `sourceColumnId` persistence
+
+**Key decisions:**
+1. FK edges render with `RelationshipEdge` (same as model edges) — consistent UX, same path style picker
+2. Default `Orthogonal` — cleaner in dense ERD layouts than `Curved`
+3. Auto-resolution re-enabled — `isForeignKey` columns generate edges automatically via naming convention (`customer_id` → `customers.id`)
+4. Edges `reconnectable: true` — drag endpoints to different handles on same table
+5. Cross-table reconnection blocked — FK relationships are editor-managed
+6. FK edges carry `data.isFk: true` — Canvas.onReconnect detects them
+7. `lineStyle` persisted through sidecar — extract/apply round-trip
+8. `fkReconnectDecision` extracted as pure function — testable without Canvas render
