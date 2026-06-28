@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
+import { resolveTableFKs } from '@/components/canvas/canvasBuilders'
 import { X, Plus, Trash2 } from 'lucide-react'
 import { TYPE_COLORS } from '@/lib/elementMeta'
 
@@ -158,6 +159,22 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                       e => e.sourceTableId === tableId && e.sourceColumnId === colId,
                     )
                     for (const e of colEdges) deleteFkEdge(containerId, e.id)
+                  } else {
+                    // Auto-resolve target table via naming convention so the
+                    // FK edge persists in the sidecar and survives page reload.
+                    const hasEdge = fkEdges.some(
+                      e => e.sourceTableId === tableId && e.sourceColumnId === colId,
+                    )
+                    if (!hasEdge) {
+                      const allTables = useWorkspaceStore.getState().tableData[containerId] ?? []
+                      const pairs = resolveTableFKs(allTables)
+                      const match = pairs.find(
+                        p => p.sourceTableId === tableId && p.sourceColumnId === colId,
+                      )
+                      if (match) {
+                        addFkEdge(containerId, match.sourceTableId, match.targetTableId, match.sourceColumnId)
+                      }
+                    }
                   }
                 }}
                 className={`w-5 h-5 rounded flex items-center justify-center text-xxs ${
