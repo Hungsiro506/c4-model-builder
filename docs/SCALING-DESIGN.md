@@ -1,8 +1,8 @@
 # c4hero Scaling Design
 
-> Status: **Active development** (last updated 2026-06-22). Pillars 1 (expand-in-place)
-> and 2 (storage seam) are shipped. Pillars 3–4 are design-phase. New UX improvements
-> are being scoped in §10 (Canvas & Edge UX).
+> Status: **Active development** (last updated 2026-06-28). Pillars 1 (expand-in-place
+> L2→L3 + DB table view) and 2 (storage seam) are shipped. Pillars 3–4 are design-phase.
+> Export-PNG feature planned (§10).
 >
 > This document captures the vision, the decisions, and — most importantly — *why* we
 > made them, so the work can be picked up and extended later.
@@ -50,7 +50,7 @@ shove in proprietary data, we lose the one thing that makes c4hero worth choosin
 
 ---
 
-## 3. Pillar 1 — Expand-in-place zoom ⚡ *partially built — L2→L3 done, L4 (code) + DB table view pending*
+## 3. Pillar 1 — Expand-in-place zoom ⚡ *L2→L3 + DB table view done, L4 (code) pending*
 
 ### What
 The app starts at the context diagram. Clicking one system expands it **in place** into its
