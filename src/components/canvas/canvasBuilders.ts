@@ -7,7 +7,7 @@ import {
   groupSpansBoundaryClusters,
   type LayoutBoundaryCluster,
 } from '@/lib/canvasLayout'
-import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship, TableDef, FkEdgeDef } from '@/types/model'
+import type { ModelElement, ElementStyle, RelationshipStyle, View, Workspace, Relationship, TableDef, FkEdgeDef, LineStyle } from '@/types/model'
 import type { TableNodeData } from './nodes/TableNode'
 import { EMPTY_EXPAND_W, EMPTY_EXPAND_H } from '@/lib/expandComposite'
 import { CHANGESTATE_ELEMENT_STYLES, CHANGESTATE_RELATIONSHIP_STYLES } from '@/lib/changeState'
@@ -1164,6 +1164,7 @@ export function buildTableEdges(
     srcColName: string | undefined,
     srcColId: string | undefined,
     tgtColId: string | undefined,
+    lineStyle: LineStyle = 'Orthogonal',
   ) => {
     const srcNodeId = tableNodeId(containerId, srcTableId)
     const tgtNodeId = tableNodeId(containerId, tgtTableId)
@@ -1179,7 +1180,7 @@ export function buildTableEdges(
       sourceId: srcTableId,
       destinationId: tgtTableId,
       description: srcColName,
-      lineStyle: 'Curved',
+      lineStyle,
       tags: [],
       properties: {},
     }
@@ -1240,6 +1241,7 @@ export function buildTableEdges(
       `__fk_manual__${containerId}__${fk.id}`,
       fk.sourceTableId, fk.targetTableId,
       sourceCol?.name, fk.sourceColumnId, fk.targetColumnId,
+      fk.lineStyle ?? 'Orthogonal',
     )
   }
 

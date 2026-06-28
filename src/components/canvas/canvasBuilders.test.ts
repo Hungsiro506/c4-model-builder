@@ -538,6 +538,42 @@ describe('buildTableEdges', () => {
     expect(edges[0].data.relationship).toMatchObject({ description: 'customer_id' })
   })
 
+  it('defaults FK edge lineStyle to Orthogonal (ERD convention)', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    // Auto edge → Orthogonal
+    const autoEdges = buildTableEdges('db1', tables, [manualEdge])
+    expect(autoEdges[0].data.relationship.lineStyle).toBe('Orthogonal')
+  })
+
+  it('manual FK edge reads lineStyle from FkEdgeDef', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    const manualWithStyle = { ...manualEdge, lineStyle: 'Straight' as const }
+    const edges = buildTableEdges('db1', tables, [manualWithStyle])
+    expect(edges[0].data.relationship.lineStyle).toBe('Straight')
+  })
+
   it('manual FK edges override auto-resolved edges for same pair', () => {
     const tables: TableDef[] = [
       {

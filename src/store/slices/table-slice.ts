@@ -215,6 +215,7 @@ export const createTableSlice: StateCreator<
       if (patch.sourceColumnId !== undefined) edge.sourceColumnId = patch.sourceColumnId
       if (patch.targetColumnId !== undefined) edge.targetColumnId = patch.targetColumnId
       if (patch.targetTableId !== undefined) edge.targetTableId = patch.targetTableId
+      if (patch.lineStyle !== undefined) edge.lineStyle = patch.lineStyle
     })
   },
 
