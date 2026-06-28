@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, Position, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react'
 
 interface FkEdgeData {
   label?: string
@@ -13,19 +13,19 @@ function FkEdge({
   sourceY,
   targetX,
   targetY,
-  sourcePosition = Position.Bottom,
-  targetPosition = Position.Top,
+  sourcePosition,
+  targetPosition,
   data,
   style: edgeStyle,
 }: EdgeProps & { data?: FkEdgeData }) {
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
-    borderRadius: 12,
+    curvature: 0.25,
   })
 
   return (
