@@ -106,6 +106,20 @@ describe('TableNode', () => {
     expect(useWorkspaceStore.getState().selectedTable).toEqual({ containerId: 'db1', tableId: 't1' })
   })
 
+  it('renders NodeHandles with handles on all 4 sides', () => {
+    renderTable({
+      tableDef: { id: 't1', name: 'Users', columns: [] },
+      containerId: 'db1',
+    })
+    // NodeHandles renders {side}-{slot}-{type} handles on all 4 sides.
+    // The old hidden-handle approach only had bottom-b-source and top-b-target.
+    // Check that left-side handles also exist (NodeHandles signature).
+    const leftSource = document.querySelector('[data-handleid="left-b-source"]')
+    expect(leftSource).toBeTruthy()
+    const rightTarget = document.querySelector('[data-handleid="right-b-target"]')
+    expect(rightTarget).toBeTruthy()
+  })
+
   it('applies selected class when this table is the selected one', () => {
     // Pre-select this table
     useWorkspaceStore.getState().selectTable('db1', 't1')

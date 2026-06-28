@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useWorkspaceStore } from '@/store/workspace'
+import { resolveTableFKs } from '@/components/canvas/canvasBuilders'
 import { X, Plus, Trash2 } from 'lucide-react'
 import { TYPE_COLORS } from '@/lib/elementMeta'
 
@@ -123,13 +124,27 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
 
         {table.columns.map((col, i) => {
           const colId = 'id' in col ? (col as { id: string }).id : `${i}`
-          // FK target data (computed outside JSX to avoid IIFE parse errors)
+          // FK target data. Look for persisted FK edge first, then fall back
+          // to auto-resolution so the dropdown shows the correct target even
+          // when the FK edge hasn't been persisted yet (e.g. before auto-save
+          // fires, or after naming-convention match on reload).
           const fkEdge = fkEdges.find(
             e => e.sourceTableId === tableId && e.sourceColumnId === colId,
           )
-          const targetTableId = fkEdge?.targetTableId ?? ''
-          const targetTable = targetTableId
-            ? tableData.find((t: { id: string }) => t.id === targetTableId)
+          let resolvedTargetId = fkEdge?.targetTableId ?? ''
+          let resolvedTargetColId = fkEdge?.targetColumnId
+          if (!fkEdge) {
+            const pairs = resolveTableFKs(tableData)
+            const match = pairs.find(
+              p => p.sourceTableId === tableId && p.sourceColumnId === colId,
+            )
+            if (match) {
+              resolvedTargetId = match.targetTableId
+              resolvedTargetColId = match.targetColumnId
+            }
+          }
+          const targetTable = resolvedTargetId
+            ? tableData.find((t: { id: string }) => t.id === resolvedTargetId)
             : undefined
           const targetColumns = (targetTable as { columns: typeof table.columns } | undefined)?.columns ?? []
           return (
@@ -158,6 +173,22 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                       e => e.sourceTableId === tableId && e.sourceColumnId === colId,
                     )
                     for (const e of colEdges) deleteFkEdge(containerId, e.id)
+                  } else {
+                    // Auto-resolve target table via naming convention so the
+                    // FK edge persists in the sidecar and survives page reload.
+                    const hasEdge = fkEdges.some(
+                      e => e.sourceTableId === tableId && e.sourceColumnId === colId,
+                    )
+                    if (!hasEdge) {
+                      const allTables = useWorkspaceStore.getState().tableData[containerId] ?? []
+                      const pairs = resolveTableFKs(allTables)
+                      const match = pairs.find(
+                        p => p.sourceTableId === tableId && p.sourceColumnId === colId,
+                      )
+                      if (match) {
+                        addFkEdge(containerId, match.sourceTableId, match.targetTableId, match.sourceColumnId)
+                      }
+                    }
                   }
                 }}
                 className={`w-5 h-5 rounded flex items-center justify-center text-xxs ${
@@ -203,8 +234,8 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
               <div className="flex items-center gap-1 px-3 pb-1" style={{ paddingLeft: 54 }}>
                 <span className="text-xxs" style={{ color: 'var(--color-text-muted)' }}>→</span>
                 <select
-                  key={`fk-tgt-${colId}-${targetTableId || 'none'}`}
-                  value={targetTableId}
+                  key={`fk-tgt-${colId}-${resolvedTargetId || 'none'}`}
+                  value={resolvedTargetId}
                   onChange={(e) => {
                     const newTgt = e.target.value
                     if (!newTgt) {
@@ -226,14 +257,18 @@ export default function TableEditor({ containerId, tableId, onClose }: TableEdit
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
-                {!!targetTableId && (
+                {!!resolvedTargetId && (
                   <select
-                    key={`fk-col-${colId}-${fkEdge?.targetColumnId || 'any'}`}
-                    value={fkEdge?.targetColumnId ?? ''}
+                    key={`fk-col-${colId}-${resolvedTargetColId || 'any'}`}
+                    value={resolvedTargetColId ?? ''}
                     onChange={(e) => {
                       const newCol = e.target.value || undefined
                       if (fkEdge) {
                         updateFkEdge(containerId, fkEdge.id, { targetColumnId: newCol })
+                      } else {
+                        // FK edge was auto-resolved but not yet persisted.
+                        const edge = addFkEdge(containerId, tableId, resolvedTargetId, colId)
+                        if (edge.id) updateFkEdge(containerId, edge.id, { targetColumnId: newCol })
                       }
                     }}
                     className="text-xxs rounded px-1 py-0.5"

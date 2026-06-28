@@ -68,6 +68,8 @@ export interface FkEdgeDef {
   targetTableId: string
   sourceColumnId?: string
   targetColumnId?: string
+  /** Visual path style. Defaults to 'Orthogonal' for ERD readability. */
+  lineStyle?: LineStyle
 }
 
 // ─── Groups ────────────────────────────────────────────────────────────

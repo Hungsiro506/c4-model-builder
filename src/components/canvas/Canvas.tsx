@@ -32,12 +32,12 @@ import {
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
-import FkEdge from './edges/FkEdge'
 import {
   buildNodes,
   buildEdges,
   buildCompositeEdges,
   buildTableEdges,
+  fkReconnectDecision,
   buildGroupNodes,
   buildBoundaryNodes,
   buildDrillableSet,
@@ -58,7 +58,6 @@ import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
-  fkEdge: FkEdge,
 }
 
 const KBD_STYLE: React.CSSProperties = {
@@ -565,12 +564,14 @@ export default function Canvas() {
       : buildEdges(workspace, view, allNodes, highlightFilters)
 
     // 5b. FK edges between table nodes inside expanded Database containers.
+    // Pass node positions for dynamic handle selection (computeHandlePair).
+    const nodePosMap = new Map(allNodes.map(n => [n.id, n.position]))
     let fkEdges: Edge[] = []
     for (const cid of expandedElementIds) {
       const tables = tableData[cid]
       const manual = fkEdgesState[cid]
       if (tables && tables.length > 0) {
-        const built = buildTableEdges(cid, tables, manual)
+        const built = buildTableEdges(cid, tables, manual, nodePosMap)
         fkEdges = fkEdges.concat(built)
       }
     }
@@ -1263,6 +1264,12 @@ export default function Canvas() {
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
       if (newConnection.source && newConnection.target) {
+        const decision = fkReconnectDecision(oldEdge, newConnection)
+        if (decision === 'block') return
+        if (decision === 'reconnect-handle') {
+          setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
+          return
+        }
         if (!canConnectElements(workspaceRef.current, newConnection.source, newConnection.target)) return
         reconnectRelationship(oldEdge.id, newConnection.source, newConnection.target)
         setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))

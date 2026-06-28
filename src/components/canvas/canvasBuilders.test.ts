@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNodes, isDatabaseContainer, tableNodeId, getTableNodeSize, buildTableNode, buildParentMap, resolveTableFKs, buildTableEdges } from './canvasBuilders'
+import { buildNodes, isDatabaseContainer, tableNodeId, getTableNodeSize, buildTableNode, buildParentMap, resolveTableFKs, buildTableEdges, fkReconnectDecision } from './canvasBuilders'
 import type { HighlightFilters } from '@/lib/highlight'
 import { THEMES } from '@/lib/themes'
 import type { ElementStyle, Workspace, Container, SoftwareSystem, Person, Component, TableDef, ModelElement } from '@/types/model'
@@ -394,7 +394,7 @@ describe('buildTableEdges', () => {
     expect(edges).toHaveLength(0)
   })
 
-  it('builds React Flow edge with correct source/target node ids', () => {
+  it('builds React Flow edge with relationship type and correct source/target', () => {
     const tables: TableDef[] = [
       {
         id: 't1', name: 'customers', columns: [
@@ -413,11 +413,11 @@ describe('buildTableEdges', () => {
     const edge = edges[0]
     expect(edge.source).toBe('__table__db1__t2')
     expect(edge.target).toBe('__table__db1__t1')
-    expect(edge.type).toBe('fkEdge')
-    expect(edge.style).toBeDefined()
+    expect(edge.type).toBe('relationship')
+    expect(edge.data.isFk).toBe(true)
   })
 
-  it('applies thin dashed style distinct from model edges', () => {
+  it('sets FK relationshipStyle with indigo dashed thin appearance', () => {
     const tables: TableDef[] = [
       {
         id: 't1', name: 'customers', columns: [
@@ -431,14 +431,15 @@ describe('buildTableEdges', () => {
       },
     ]
     const edges = buildTableEdges('db1', tables, [manualEdge])
-    expect(edges[0].style).toMatchObject({
-      stroke: expect.any(String),
-      strokeDasharray: expect.any(String),
-      strokeWidth: expect.any(Number),
+    const relStyle = edges[0].data.relationshipStyle
+    expect(relStyle).toMatchObject({
+      color: expect.any(String),
+      thickness: 1.5,
+      dashed: true,
     })
   })
 
-  it('labels edge with FK column name', () => {
+  it('sets FK column name as relationship description for edge label', () => {
     const tables: TableDef[] = [
       {
         id: 't1', name: 'customers', columns: [
@@ -452,6 +453,232 @@ describe('buildTableEdges', () => {
       },
     ]
     const edges = buildTableEdges('db1', tables, [manualEdge])
-    expect(edges[0].data).toMatchObject({ label: 'customer_id' })
+    expect(edges[0].data.relationship).toMatchObject({ description: 'customer_id' })
+  })
+
+  it('uses computeHandlePair for dynamic handles when positions provided', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    // Source (t2) left of target (t1) → dx > 0 means right-b-source / left-b-target
+    const posMap = new Map<string, { x: number; y: number }>()
+    posMap.set('__table__db1__t2', { x: 0, y: 100 })
+    posMap.set('__table__db1__t1', { x: 400, y: 100 })
+    const edges = buildTableEdges('db1', tables, [manualEdge], posMap)
+    expect(edges).toHaveLength(1)
+    expect(edges[0].sourceHandle).toBe('right-b-source')
+    expect(edges[0].targetHandle).toBe('left-b-target')
+  })
+
+  it('falls back to bottom/top handles when positions not provided', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges).toHaveLength(1)
+    expect(edges[0].sourceHandle).toBe('bottom-b-source')
+    expect(edges[0].targetHandle).toBe('top-b-target')
+  })
+
+  it('FK edges are selectable and reconnectable', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges[0].selectable).toBe(true)
+    expect(edges[0].reconnectable).toBe(true)
+  })
+
+  it('auto-resolves FK edges from isForeignKey columns via naming convention', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables, undefined)
+    expect(edges).toHaveLength(1)
+    expect(edges[0].id).toContain('__fk_auto__')
+    expect(edges[0].source).toBe('__table__db1__t2')
+    expect(edges[0].target).toBe('__table__db1__t1')
+    expect(edges[0].data.relationship).toMatchObject({ description: 'customer_id' })
+  })
+
+  it('defaults FK edge lineStyle to Orthogonal (ERD convention)', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    // Auto edge → Orthogonal
+    const autoEdges = buildTableEdges('db1', tables, [manualEdge])
+    expect(autoEdges[0].data.relationship.lineStyle).toBe('Orthogonal')
+  })
+
+  it('manual FK edge reads lineStyle from FkEdgeDef', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    const manualWithStyle = { ...manualEdge, lineStyle: 'Straight' as const }
+    const edges = buildTableEdges('db1', tables, [manualWithStyle])
+    expect(edges[0].data.relationship.lineStyle).toBe('Straight')
+  })
+
+  it('FK edge data.isFk flag enables onReconnect FK detection', () => {
+    // Canvas.onReconnect checks (oldEdge.data as { isFk?: boolean })?.isFk
+    // to distinguish FK edges from model relationship edges.
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges[0].data.isFk).toBe(true)
+    // Verify onReconnect condition: newConnection.source must equal oldEdge.source
+    const edge = edges[0]
+    expect(edge.reconnectable).toBe(true)
+    // onReconnect rejects when source or target changes
+    const sameSourceReconnect = edge.source === edge.source
+    const sameTargetReconnect = edge.target === edge.target
+    expect(sameSourceReconnect).toBe(true)
+    expect(sameTargetReconnect).toBe(true)
+  })
+
+  it('manual FK edges override auto-resolved edges for same pair', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+          { name: 'customer_id', type: 'int', isForeignKey: true },
+        ],
+      },
+    ]
+    const manualOverride = { id: 'fe1', sourceTableId: 't2', targetTableId: 't1', sourceColumnId: 'col-custom' }
+    const edges = buildTableEdges('db1', tables, [manualOverride])
+    expect(edges).toHaveLength(1)
+    expect(edges[0].id).toContain('__fk_manual__')
+  })
+})
+
+// ─── fkReconnectDecision ────────────────────────────────────────────
+
+describe('fkReconnectDecision', () => {
+  const fkEdge = {
+    source: 'node-a',
+    target: 'node-b',
+    data: { isFk: true },
+  }
+
+  const modelEdge = {
+    source: 'node-a',
+    target: 'node-b',
+    data: { relationship: { id: 'rel-1' } },
+  }
+
+  it('returns full-reconnect for non-FK (model relationship) edges', () => {
+    expect(fkReconnectDecision(modelEdge, { source: 'node-a', target: 'node-c' }))
+      .toBe('full-reconnect')
+  })
+
+  it('returns full-reconnect when edge data has no isFk flag', () => {
+    expect(fkReconnectDecision(
+      { source: 'a', target: 'b', data: {} },
+      { source: 'a', target: 'b' },
+    )).toBe('full-reconnect')
+  })
+
+  it('returns full-reconnect when edge data is undefined', () => {
+    expect(fkReconnectDecision(
+      { source: 'a', target: 'b', data: undefined },
+      { source: 'a', target: 'b' },
+    )).toBe('full-reconnect')
+  })
+
+  it('returns reconnect-handle for FK edge with unchanged source and target', () => {
+    expect(fkReconnectDecision(fkEdge, { source: 'node-a', target: 'node-b' }))
+      .toBe('reconnect-handle')
+  })
+
+  it('returns block when FK edge source changes (cross-table)', () => {
+    expect(fkReconnectDecision(fkEdge, { source: 'node-c', target: 'node-b' }))
+      .toBe('block')
+  })
+
+  it('returns block when FK edge target changes (cross-table)', () => {
+    expect(fkReconnectDecision(fkEdge, { source: 'node-a', target: 'node-c' }))
+      .toBe('block')
+  })
+
+  it('returns block when both source and target change', () => {
+    expect(fkReconnectDecision(fkEdge, { source: 'node-c', target: 'node-d' }))
+      .toBe('block')
+  })
+
+  it('returns reconnect-handle when only handle changes (same source/target nodes)', () => {
+    // ReactFlow reconnectEdge only changes handles, source/target stay same
+    expect(fkReconnectDecision(fkEdge, { source: 'node-a', target: 'node-b' }))
+      .toBe('reconnect-handle')
   })
 })

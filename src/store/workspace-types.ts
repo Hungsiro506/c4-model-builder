@@ -279,6 +279,6 @@ export interface WorkspaceState extends UndoState {
   /** FK edge definitions keyed by container ID. Sidecar-persisted. */
   fkEdges: Record<string, FkEdgeDef[]>
   addFkEdge: (containerId: string, sourceTableId: string, targetTableId: string, sourceColumnId?: string) => FkEdgeDef
-  updateFkEdge: (containerId: string, fkEdgeId: string, patch: Partial<Pick<FkEdgeDef, 'sourceColumnId' | 'targetColumnId' | 'targetTableId'>>) => void
+  updateFkEdge: (containerId: string, fkEdgeId: string, patch: Partial<Pick<FkEdgeDef, 'sourceColumnId' | 'targetColumnId' | 'targetTableId' | 'lineStyle'>>) => void
   deleteFkEdge: (containerId: string, fkEdgeId: string) => void
 }

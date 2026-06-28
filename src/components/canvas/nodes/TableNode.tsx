@@ -1,8 +1,9 @@
 import { memo, useCallback } from 'react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { type NodeProps } from '@xyflow/react'
 import type { TableDef, ElementStyle } from '@/types/model'
 import { useWorkspaceStore } from '@/store/workspace'
 import { Key, ArrowRightLeft } from 'lucide-react'
+import NodeHandles from './NodeHandles'
 
 export interface TableNodeData {
   tableDef: TableDef
@@ -56,9 +57,8 @@ function TableNode({ data }: NodeProps & { data: TableNodeData }) {
         }
       }}
     >
-      {/* Hidden handles for FK edge routing (ReactFlow #008) */}
-      <Handle type="source" position={Position.Bottom} id="bottom-b-source" style={{ opacity: 0, pointerEvents: 'none' }} />
-      <Handle type="target" position={Position.Top} id="top-b-target" style={{ opacity: 0, pointerEvents: 'none' }} />
+      {/* Interactive handles for FK edge routing — same pattern as C4 nodes */}
+      <NodeHandles />
 
       {/* Header */}
       <div
