@@ -1133,14 +1133,11 @@ export function resolveTableFKs(tables: TableDef[]): FKEdgePair[] {
 /** Build React Flow edges between table nodes for FK relationships.
  *  Merges auto-resolved edges (naming convention) with manual FK edges.
  *  Manual edges take priority — if both produce the same source→target, the
- *  auto edge is dropped.
- *  When a position map is provided, uses computeHandlePair for dynamic handle
- *  selection (same as model edges). Falls back to bottom→top otherwise. */
+ *  auto edge is dropped. */
 export function buildTableEdges(
   containerId: string,
   tables: TableDef[],
   manualFkEdges?: FkEdgeDef[],
-  nodePositions?: Map<string, { x: number; y: number }>,
 ): Edge[] {
   const edges: Edge[] = []
 
@@ -1154,22 +1151,12 @@ export function buildTableEdges(
       ? sourceTable.columns.find(c => (c.id ?? c.name) === fk.sourceColumnId)
       : undefined
 
-    const sourceNodeId = tableNodeId(containerId, fk.sourceTableId)
-    const targetNodeId = tableNodeId(containerId, fk.targetTableId)
-
-    // Compute handles dynamically from positions, fall back to bottom→top
-    const srcPos = nodePositions?.get(sourceNodeId)
-    const dstPos = nodePositions?.get(targetNodeId)
-    const handles = srcPos && dstPos
-      ? computeHandlePair(srcPos, dstPos)
-      : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
-
     edges.push({
       id: `__fk_manual__${containerId}__${fk.id}`,
-      source: sourceNodeId,
-      target: targetNodeId,
-      sourceHandle: handles.sourceHandle,
-      targetHandle: handles.targetHandle,
+      source: tableNodeId(containerId, fk.sourceTableId),
+      target: tableNodeId(containerId, fk.targetTableId),
+      sourceHandle: 'bottom-b-source',
+      targetHandle: 'top-b-target',
       type: 'fkEdge',
       data: {
         label: sourceCol?.name ?? '',

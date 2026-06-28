@@ -8,7 +8,7 @@ Keep current as the feature changes.
 > **PR B2 merged** (2026-06-25). Branch `feat/db-table-view-b2` (PR #24).
 > **PR B2.5 merged** (2026-06-26). Branch `feat/db-table-view-b2.5` (PR #25).
 > **PR table-drag submitted** (2026-06-26). Branch `feat/table-drag` (PR #26).
-> PR B3 deferred (Mermaid overlay). PR FK-edge-interaction next session.
+> PR B3 deferred (Mermaid overlay). PR FK-edge-interact submitted (2026-06-28). Branch `feat/fk-edge-interact` (PR #27).
 
 ## Problem
 
@@ -97,7 +97,7 @@ documentation, not just draw a cylinder and move on.
 
 - ~~FK edge rendering between table nodes~~ (done, PR #25)
 - ~~Table node dragging inside DB container~~ (done, PR #26)
-- FK edge path adjustment (drag endpoints to different handles) — next session
+- FK edge path adjustment (drag endpoints to different handles) — done, PR #27
 - Undo support for table edits
 - SQL DDL import / `DatabaseProvider` interface
 - Table highlight/fade participation

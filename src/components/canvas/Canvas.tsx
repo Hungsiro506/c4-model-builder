@@ -565,14 +565,12 @@ export default function Canvas() {
       : buildEdges(workspace, view, allNodes, highlightFilters)
 
     // 5b. FK edges between table nodes inside expanded Database containers.
-    // Pass node positions so buildTableEdges can compute optimal handle sides.
-    const nodePosMap = new Map(allNodes.map(n => [n.id, n.position]))
     let fkEdges: Edge[] = []
     for (const cid of expandedElementIds) {
       const tables = tableData[cid]
       const manual = fkEdgesState[cid]
       if (tables && tables.length > 0) {
-        const built = buildTableEdges(cid, tables, manual, nodePosMap)
+        const built = buildTableEdges(cid, tables, manual)
         fkEdges = fkEdges.concat(built)
       }
     }
