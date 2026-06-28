@@ -97,7 +97,7 @@ documentation, not just draw a cylinder and move on.
 
 - ~~FK edge rendering between table nodes~~ (done, PR #25)
 - ~~Table node dragging inside DB container~~ (done, PR #26)
-- FK edge path adjustment (drag endpoints to different handles) — done, PR #27
+- ~~FK edge path adjustment (drag endpoints to different handles)~~ — done, PR #27
 - Undo support for table edits
 - SQL DDL import / `DatabaseProvider` interface
 - Table highlight/fade participation
