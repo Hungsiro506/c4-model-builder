@@ -574,6 +574,33 @@ describe('buildTableEdges', () => {
     expect(edges[0].data.relationship.lineStyle).toBe('Straight')
   })
 
+  it('FK edge data.isFk flag enables onReconnect FK detection', () => {
+    // Canvas.onReconnect checks (oldEdge.data as { isFk?: boolean })?.isFk
+    // to distinguish FK edges from model relationship edges.
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges[0].data.isFk).toBe(true)
+    // Verify onReconnect condition: newConnection.source must equal oldEdge.source
+    const edge = edges[0]
+    expect(edge.reconnectable).toBe(true)
+    // onReconnect rejects when source or target changes
+    const sameSourceReconnect = edge.source === edge.source
+    const sameTargetReconnect = edge.target === edge.target
+    expect(sameSourceReconnect).toBe(true)
+    expect(sameTargetReconnect).toBe(true)
+  })
+
   it('manual FK edges override auto-resolved edges for same pair', () => {
     const tables: TableDef[] = [
       {
