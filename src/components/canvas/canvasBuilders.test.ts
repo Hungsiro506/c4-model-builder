@@ -394,7 +394,7 @@ describe('buildTableEdges', () => {
     expect(edges).toHaveLength(0)
   })
 
-  it('builds React Flow edge with correct source/target node ids', () => {
+  it('builds React Flow edge with relationship type and correct source/target', () => {
     const tables: TableDef[] = [
       {
         id: 't1', name: 'customers', columns: [
@@ -413,11 +413,11 @@ describe('buildTableEdges', () => {
     const edge = edges[0]
     expect(edge.source).toBe('__table__db1__t2')
     expect(edge.target).toBe('__table__db1__t1')
-    expect(edge.type).toBe('fkEdge')
-    expect(edge.style).toBeDefined()
+    expect(edge.type).toBe('relationship')
+    expect(edge.data.isFk).toBe(true)
   })
 
-  it('applies thin dashed style distinct from model edges', () => {
+  it('sets FK relationshipStyle with indigo dashed thin appearance', () => {
     const tables: TableDef[] = [
       {
         id: 't1', name: 'customers', columns: [
@@ -431,14 +431,15 @@ describe('buildTableEdges', () => {
       },
     ]
     const edges = buildTableEdges('db1', tables, [manualEdge])
-    expect(edges[0].style).toMatchObject({
-      stroke: expect.any(String),
-      strokeDasharray: expect.any(String),
-      strokeWidth: expect.any(Number),
+    const relStyle = edges[0].data.relationshipStyle
+    expect(relStyle).toMatchObject({
+      color: expect.any(String),
+      thickness: 1.5,
+      dashed: true,
     })
   })
 
-  it('labels edge with FK column name', () => {
+  it('sets FK column name as relationship description for edge label', () => {
     const tables: TableDef[] = [
       {
         id: 't1', name: 'customers', columns: [
@@ -452,10 +453,33 @@ describe('buildTableEdges', () => {
       },
     ]
     const edges = buildTableEdges('db1', tables, [manualEdge])
-    expect(edges[0].data).toMatchObject({ label: 'customer_id' })
+    expect(edges[0].data.relationship).toMatchObject({ description: 'customer_id' })
   })
 
-  it('FK edges use bottom-b-source / top-b-target handles matching NodeHandles', () => {
+  it('uses computeHandlePair for dynamic handles when positions provided', () => {
+    const tables: TableDef[] = [
+      {
+        id: 't1', name: 'customers', columns: [
+          { name: 'id', type: 'int', isPrimaryKey: true },
+        ],
+      },
+      {
+        id: 't2', name: 'orders', columns: [
+          { id: 'col1', name: 'customer_id', type: 'int' },
+        ],
+      },
+    ]
+    // Source (t2) left of target (t1) → dx > 0 means right-b-source / left-b-target
+    const posMap = new Map<string, { x: number; y: number }>()
+    posMap.set('__table__db1__t2', { x: 0, y: 100 })
+    posMap.set('__table__db1__t1', { x: 400, y: 100 })
+    const edges = buildTableEdges('db1', tables, [manualEdge], posMap)
+    expect(edges).toHaveLength(1)
+    expect(edges[0].sourceHandle).toBe('right-b-source')
+    expect(edges[0].targetHandle).toBe('left-b-target')
+  })
+
+  it('falls back to bottom/top handles when positions not provided', () => {
     const tables: TableDef[] = [
       {
         id: 't1', name: 'customers', columns: [
@@ -474,7 +498,7 @@ describe('buildTableEdges', () => {
     expect(edges[0].targetHandle).toBe('top-b-target')
   })
 
-  it('FK edges are reconnectable for handle interactivity', () => {
+  it('FK edges are selectable and reconnectable', () => {
     const tables: TableDef[] = [
       {
         id: 't1', name: 'customers', columns: [
@@ -488,6 +512,7 @@ describe('buildTableEdges', () => {
       },
     ]
     const edges = buildTableEdges('db1', tables, [manualEdge])
+    expect(edges[0].selectable).toBe(true)
     expect(edges[0].reconnectable).toBe(true)
   })
 
@@ -505,13 +530,12 @@ describe('buildTableEdges', () => {
         ],
       },
     ]
-    // No manual edges — auto-resolution should create the FK edge
     const edges = buildTableEdges('db1', tables, undefined)
     expect(edges).toHaveLength(1)
     expect(edges[0].id).toContain('__fk_auto__')
     expect(edges[0].source).toBe('__table__db1__t2')
     expect(edges[0].target).toBe('__table__db1__t1')
-    expect(edges[0].data).toMatchObject({ label: 'customer_id' })
+    expect(edges[0].data.relationship).toMatchObject({ description: 'customer_id' })
   })
 
   it('manual FK edges override auto-resolved edges for same pair', () => {
@@ -528,10 +552,9 @@ describe('buildTableEdges', () => {
         ],
       },
     ]
-    // Manual edge for same source→target as auto-resolved
     const manualOverride = { id: 'fe1', sourceTableId: 't2', targetTableId: 't1', sourceColumnId: 'col-custom' }
     const edges = buildTableEdges('db1', tables, [manualOverride])
     expect(edges).toHaveLength(1)
-    expect(edges[0].id).toContain('__fk_manual__') // manual wins
+    expect(edges[0].id).toContain('__fk_manual__')
   })
 })

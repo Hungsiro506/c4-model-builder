@@ -1130,96 +1130,117 @@ export function resolveTableFKs(tables: TableDef[]): FKEdgePair[] {
   return pairs
 }
 
+/** FK edge default style — indigo, thin, dashed. Same mechanism as
+ *  model relationships so FK edges render with the same RelationshipEdge
+ *  component and the user can select+style them identically. */
+const FK_EDGE_STYLE: RelationshipStyle = {
+  tag: '__fk__',
+  color: 'var(--color-fk-edge, #6366f1)',
+  thickness: 1.5,
+  dashed: true,
+}
+
 /** Build React Flow edges between table nodes for FK relationships.
- *  Auto-resolves FK edges from isForeignKey columns via naming convention,
- *  then layers manual FK edges on top. Manual edges override auto edges
- *  for the same source→target pair. */
+ *  Uses the same `relationship` edge type as model edges so FK edges get
+ *  the same path style options (Straight / Curved / Orthogonal) and the
+ *  same visual treatment. Auto-resolves FK edges from isForeignKey columns
+ *  via naming convention, then layers manual FK edges on top. */
 export function buildTableEdges(
   containerId: string,
   tables: TableDef[],
   manualFkEdges?: FkEdgeDef[],
+  nodePositions?: Map<string, { x: number; y: number }>,
 ): Edge[] {
   const edges: Edge[] = []
 
   // Track which source→target pairs already have an edge (dedup)
   const seenPairs = new Set<string>()
 
+  /** Build an edge object from source/target table IDs + optional column */
+  const pushEdge = (
+    edgeId: string,
+    srcTableId: string,
+    tgtTableId: string,
+    srcColName: string | undefined,
+    srcColId: string | undefined,
+    tgtColId: string | undefined,
+  ) => {
+    const srcNodeId = tableNodeId(containerId, srcTableId)
+    const tgtNodeId = tableNodeId(containerId, tgtTableId)
+    const srcPos = nodePositions?.get(srcNodeId)
+    const dstPos = nodePositions?.get(tgtNodeId)
+    const handles = srcPos && dstPos
+      ? computeHandlePair(srcPos, dstPos)
+      : { sourceHandle: 'bottom-b-source', targetHandle: 'top-b-target' }
+
+    // Synthetic relationship so RelationshipEdge renders FK edges natively
+    const syntheticRel: Relationship = {
+      id: edgeId,
+      sourceId: srcTableId,
+      destinationId: tgtTableId,
+      description: srcColName,
+      lineStyle: 'Curved',
+      tags: [],
+      properties: {},
+    }
+
+    edges.push({
+      id: edgeId,
+      source: srcNodeId,
+      target: tgtNodeId,
+      sourceHandle: handles.sourceHandle,
+      targetHandle: handles.targetHandle,
+      type: 'relationship',
+      data: {
+        relationship: syntheticRel,
+        relationshipStyle: FK_EDGE_STYLE,
+        isFk: true,
+        fkSourceColumnId: srcColId,
+        fkTargetColumnId: tgtColId,
+      },
+      selectable: true,
+      focusable: false,
+      reconnectable: true,
+      zIndex: 3,
+    })
+  }
+
   // 1. Auto-resolved edges from isForeignKey columns via naming convention
   const autoPairs = resolveTableFKs(tables)
   for (const pair of autoPairs) {
     const sourceTable = tables.find(t => t.id === pair.sourceTableId)
-    if (!sourceTable) continue
-    const sourceCol = sourceTable.columns.find(c => (c.id ?? c.name) === pair.sourceColumnId)
+    const sourceCol = sourceTable?.columns.find(c => (c.id ?? c.name) === pair.sourceColumnId)
     const key = `${pair.sourceTableId}->${pair.targetTableId}`
     seenPairs.add(key)
-
-    edges.push({
-      id: `__fk_auto__${containerId}__${pair.sourceTableId}__${pair.targetTableId}`,
-      source: tableNodeId(containerId, pair.sourceTableId),
-      target: tableNodeId(containerId, pair.targetTableId),
-      sourceHandle: 'bottom-b-source',
-      targetHandle: 'top-b-target',
-      type: 'fkEdge',
-      data: {
-        label: sourceCol?.name ?? '',
-        sourceColumnId: pair.sourceColumnId,
-        targetColumnId: pair.targetColumnId,
-      },
-      style: {
-        stroke: 'var(--color-fk-edge, #6366f1)',
-        strokeDasharray: '6 3',
-        strokeWidth: 1.5,
-      },
-      selectable: false,
-      focusable: false,
-      reconnectable: true,
-      interactionWidth: 20,
-      zIndex: 3,
-    })
+    pushEdge(
+      `__fk_auto__${containerId}__${pair.sourceTableId}__${pair.targetTableId}`,
+      pair.sourceTableId, pair.targetTableId,
+      sourceCol?.name, pair.sourceColumnId, pair.targetColumnId,
+    )
   }
 
   // 2. Manual FK edges — override auto edges for same source→target
   for (const fk of manualFkEdges ?? []) {
     const sourceTable = tables.find(t => t.id === fk.sourceTableId)
-    if (!sourceTable) continue // orphan: source table deleted
+    if (!sourceTable) continue
     const targetTable = tables.find(t => t.id === fk.targetTableId)
-    if (!targetTable) continue // orphan: target table deleted
+    if (!targetTable) continue
     const sourceCol = fk.sourceColumnId
       ? sourceTable.columns.find(c => (c.id ?? c.name) === fk.sourceColumnId)
       : undefined
 
     const key = `${fk.sourceTableId}->${fk.targetTableId}`
-    // Remove auto-edge for same pair (manual overrides)
     if (seenPairs.has(key)) {
       const autoId = `__fk_auto__${containerId}__${fk.sourceTableId}__${fk.targetTableId}`
       const idx = edges.findIndex(e => e.id === autoId)
       if (idx !== -1) edges.splice(idx, 1)
     }
     seenPairs.add(key)
-
-    edges.push({
-      id: `__fk_manual__${containerId}__${fk.id}`,
-      source: tableNodeId(containerId, fk.sourceTableId),
-      target: tableNodeId(containerId, fk.targetTableId),
-      sourceHandle: 'bottom-b-source',
-      targetHandle: 'top-b-target',
-      type: 'fkEdge',
-      data: {
-        label: sourceCol?.name ?? '',
-        sourceColumnId: fk.sourceColumnId,
-        targetColumnId: fk.targetColumnId,
-      },
-      style: {
-        stroke: 'var(--color-fk-edge, #6366f1)',
-        strokeDasharray: '6 3',
-        strokeWidth: 1.5,
-      },
-      selectable: false,
-      focusable: false,
-      reconnectable: true,
-      interactionWidth: 20,
-      zIndex: 3,
-    })
+    pushEdge(
+      `__fk_manual__${containerId}__${fk.id}`,
+      fk.sourceTableId, fk.targetTableId,
+      sourceCol?.name, fk.sourceColumnId, fk.targetColumnId,
+    )
   }
 
   return edges

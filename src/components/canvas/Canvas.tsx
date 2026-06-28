@@ -32,7 +32,6 @@ import {
 import { nodeTypes } from './nodes'
 import type { EdgeTypes } from '@xyflow/react'
 import RelationshipEdge from './edges/RelationshipEdge'
-import FkEdge from './edges/FkEdge'
 import {
   buildNodes,
   buildEdges,
@@ -58,7 +57,6 @@ import CanvasGuide from './CanvasGuide'
 
 const edgeTypes: EdgeTypes = {
   relationship: RelationshipEdge,
-  fkEdge: FkEdge,
 }
 
 const KBD_STYLE: React.CSSProperties = {
@@ -565,12 +563,14 @@ export default function Canvas() {
       : buildEdges(workspace, view, allNodes, highlightFilters)
 
     // 5b. FK edges between table nodes inside expanded Database containers.
+    // Pass node positions for dynamic handle selection (computeHandlePair).
+    const nodePosMap = new Map(allNodes.map(n => [n.id, n.position]))
     let fkEdges: Edge[] = []
     for (const cid of expandedElementIds) {
       const tables = tableData[cid]
       const manual = fkEdgesState[cid]
       if (tables && tables.length > 0) {
-        const built = buildTableEdges(cid, tables, manual)
+        const built = buildTableEdges(cid, tables, manual, nodePosMap)
         fkEdges = fkEdges.concat(built)
       }
     }
@@ -1264,8 +1264,7 @@ export default function Canvas() {
     (oldEdge: Edge, newConnection: Connection) => {
       if (newConnection.source && newConnection.target) {
         // FK edges: allow same-node handle changes, block cross-table reconnection.
-        // Only the handle attachment point changes — the FK relationship stays fixed.
-        if (oldEdge.type === 'fkEdge') {
+        if ((oldEdge.data as { isFk?: boolean })?.isFk) {
           if (newConnection.source !== oldEdge.source || newConnection.target !== oldEdge.target) return
           setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds))
           return
