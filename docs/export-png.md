@@ -2,14 +2,16 @@
 
 Context doc for AI-assisted development. Records design decisions before implementation.
 
-> Status: **planned** (2026-06-28). Not yet started.
+> Status: **in progress** (2026-06-30). Branch `feat/export-selected-png`.
 
 ## Problem
 
 Users need to share diagrams outside the tool — paste into docs, slides, Slack, Notion.
-Today there is no export. The only option is screenshot the browser window, which includes
-chrome, panels, and background. Architects need a clean way to select a few nodes and
-export just those nodes + their edges as a transparent PNG.
+Whole-canvas export already exists (`exportCanvasAsPNG` / `exportCanvasAsSVG` /
+`copyCanvasAsPNG` in `src/lib/exportUtils.ts`, shipped upstream as PR #72), but it always
+captures the *entire* view with its background. There is no way to export *just a few
+selected nodes* on a transparent background. Architects need a clean way to select a subset
+and export only those nodes + the edges between them as a transparent PNG.
 
 ## Scope (locked)
 
@@ -34,33 +36,48 @@ export just those nodes + their edges as a transparent PNG.
 1. **html-to-image for DOM → PNG.** Why: React Flow nodes are HTML elements,
    not SVG. Cannot screenshot just the SVG layer. The library renders a DOM subtree to a
    `<canvas>`, crops to bounds, and exports. `html-to-image` is lighter and better maintained
-   than `html2canvas`.
+   than `html2canvas`. Already a dependency, already used by `exportCanvasAsPNG`.
 
-2. **BBox computation from selected nodes.** Why: compute the bounding box of all selected
-   React Flow nodes (position + measured size). Offset edges to be relative to that bbox.
-   Render only the selected subset into an off-screen container, snapshot, discard.
+2. **Filter the live viewport — NOT an off-screen clone.** *(Revised 2026-06-30 — the
+   original plan called for cloning selected nodes into a hidden `-9999px` container and
+   replicating every CSS custom property. That path is brittle: edges live in a separate
+   SVG layer from nodes, so a clone has to recompute edge coordinates and carry `url(#…)`
+   marker defs along by hand.)* Instead we follow React Flow's own download-image recipe and
+   `html-to-image`'s existing usage in this repo:
+   - compute the bounding box of the selected nodes with `getNodesBounds(selectedNodes)`
+     (built-in RF util),
+   - derive a transform with `getViewportForBounds(bbox, width, height, minZoom, maxZoom, 0)`,
+   - call `toBlob(viewportEl, { width, height, style: { transform }, filter })` against the
+     **live** `.react-flow__viewport`.
+   The `filter(domNode)` callback drops everything we don't want (see #5). Markers and CSS
+   vars stay in the live DOM tree, so nothing needs re-stitching or replicating.
 
-3. **Off-screen render approach.** Why: clone the selected nodes + edges into a hidden
-   container with `position: absolute; left: -9999px`, apply styles, render with
-   `html-to-image`, then remove. This avoids fighting React Flow's coordinate system
-   and viewport transforms.
+3. **BBox from selected content nodes.** Compute over the selected nodes *after* excluding
+   boundary/group overlays (#5), so the crop hugs the real content.
 
-4. **Transparent background by removing canvas layers.** Why: the off-screen container
-   has no background. `html-to-image` defaults to transparent unless a background color
-   is explicitly set. Skip the dot-grid `<Background />` and theme background.
+4. **Transparent background.** Pass `backgroundColor: undefined` (html-to-image defaults to
+   transparent) and have the `filter` drop the dot-grid `.react-flow__background` layer.
+   No theme background is applied. v1 uses `pixelRatio: 1` (locked-scope 1x).
 
-5. **No boundary/group overlay nodes in export.** Why: these are decorative wrappers
-   derived from member positions. Exporting them adds visual noise. Only content nodes
-   (person, softwareSystem, container, component, table) and edges between selected
-   nodes are included.
+5. **`filter` excludes overlays + non-participating edges.** Drop: nodes not in the selected
+   set; boundary/group overlay nodes (decorative wrappers derived from member positions);
+   edges where *both* endpoints are not selected; React Flow chrome (`.react-flow__background`,
+   `__minimap`, `__controls`, `__panel`, `__attribution`). Keep content nodes (person,
+   softwareSystem, container, component, table — including synthetic `__table__*` ids) and
+   edges between two selected nodes.
 
 ## Key files (planned)
 
-- `src/lib/exportPng.ts` — `exportSelectedAsPng(nodes, edges)` — computes bbox, builds
-  off-screen container, renders with html-to-image, triggers download
-- `src/components/canvas/ExportButton.tsx` — toolbar button, disabled when no selection
-- `src/components/canvas/Canvas.tsx` — wires ExportButton, reads selected element IDs
-  from store, filters nodes/edges
+- `src/lib/exportSelectedPng.ts` —
+  - `selectExportNodeIds(nodes, selectedIds)` — pure: selected content nodes, boundary/group
+    excluded.
+  - `selectExportEdgeIds(edges, exportNodeIdSet)` — pure: edges with both endpoints in the set.
+  - `exportSelectedAsPng(viewportEl, nodes, edges, selectedIds)` — DOM: bbox + transform +
+    `toBlob` with the filter, then `downloadBlob` (reused from `exportUtils.ts`).
+- `src/components/layout/FloatingTopPill.tsx` (or the existing export menu) — an
+  "Export selection as PNG" action, disabled when `selectedElementIds.length === 0`.
+- `src/components/canvas/Canvas.tsx` — already holds the `useReactFlow()` instance and reads
+  `selectedElementIds`; supplies nodes/edges/viewport element to the export call.
 
 ## Technical notes
 
@@ -76,10 +93,11 @@ export just those nodes + their edges as a transparent PNG.
 
 ## Tests
 
-- `src/lib/exportPng.test.ts` — unit: bbox computation, node/edge filtering,
-  selected-edges-only logic
-- `e2e/export-png/export-png.spec.ts` — E2E: select nodes, click export, verify
-  download triggered, verify image dimensions match selection
+- `src/lib/exportSelectedPng.test.ts` — unit: node/edge filtering (overlay
+  exclusion, both-endpoints edge rule, synthetic table ids), the `html-to-image`
+  filter predicate, and the `toBlob` call shape (transparent, 1x).
+- `e2e/canvas/export-selected-png.spec.ts` — E2E: select nodes → click the
+  multi-select-bar "PNG" action → verify a `.png` download is triggered.
 
 ## Open items
 
@@ -87,3 +105,16 @@ export just those nodes + their edges as a transparent PNG.
 - Export progress indicator for large selections
 - Copy to clipboard instead of download
 - Crop padding config (fixed 16px or user-adjustable)
+- Single-node export (the bar only appears at 2+ selection; v1 ships multi only)
+
+## Progress log
+
+### 2026-06-30 — shipped (branch `feat/export-selected-png`)
+
+- `src/lib/exportSelectedPng.ts` — pure filters (`selectExportNodeIds`,
+  `selectExportEdgeIds`, `makeExportFilter`) + `exportSelectedAsPng` /
+  `downloadSelectedAsPng`. Filter-live-viewport approach (decision #2), 1x,
+  transparent.
+- Wired a "PNG" action into `src/components/layout/MultiSelectBar.tsx` (visible
+  on 2+ selection). Passes `reactFlow.getNodesBounds` for sub-flow correctness.
+- 15 unit tests + 1 E2E. `npm run typecheck` + build clean.

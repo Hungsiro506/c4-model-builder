@@ -17,7 +17,9 @@ import {
   Layers,
   Trash2,
   ChevronDown,
+  ImageDown,
 } from 'lucide-react'
+import { downloadSelectedAsPng } from '@/lib/exportSelectedPng'
 
 type AlignMode = 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom'
 type LayoutAxis = 'horizontal' | 'vertical'
@@ -335,6 +337,20 @@ export default function MultiSelectBar() {
     applyLayoutPositions(straightened)
   }
 
+  async function handleExportPng() {
+    const viewport = document.querySelector<HTMLElement>('.react-flow__viewport')
+    if (!viewport) return
+    const filename = `${workspace?.name ?? 'workspace'}-selection.png`
+    await downloadSelectedAsPng(
+      viewport,
+      reactFlow.getNodes(),
+      reactFlow.getEdges(),
+      selectedElementIds,
+      filename,
+      reactFlow.getNodesBounds, // hook version handles sub-flow offsets
+    )
+  }
+
   const btnStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     height: '100%', padding: '0 10px',
@@ -450,6 +466,18 @@ export default function MultiSelectBar() {
         >
           <Layers size={14} />
           <span>Group</span>
+        </button>
+
+        {sep}
+
+        {/* Export selection as transparent PNG */}
+        <button className="hover-lift" style={btnStyle}
+          title={`Export ${count} elements as a transparent PNG`}
+          aria-label={`Export ${count} elements as a transparent PNG`}
+          onClick={handleExportPng}
+        >
+          <ImageDown size={14} />
+          <span>PNG</span>
         </button>
 
         {sep}
