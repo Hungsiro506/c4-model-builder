@@ -13,11 +13,14 @@ Users learn by trial and error, which is bad UX for a professional tool.
 
 ## Scope (locked)
 
-- **Floating panel** in bottom-left corner of canvas, semi-transparent, compact
-- **Toggle via toolbar button** — always visible when on, one click to hide
+- **Always visible** — floating panel in bottom-left corner of canvas,
+  semi-transparent, always on. Toggle button in toolbar to hide.
+- **Toggle state persisted** — show/hide preference survives page reload
 - **Static reference** — no canvas interaction in v1 (interactive legend is v2)
 - **Content v1:** element change states + edge styles + edge markers
 - **Auto-hides** in presentation mode
+- **Included in PNG export** — when user exports selected nodes, legend renders
+  at bottom-left of the exported image (fixed offset from content bbox)
 
 ## Out of scope (deferred)
 
@@ -28,9 +31,10 @@ Users learn by trial and error, which is bad UX for a professional tool.
 
 ## Key decisions (and why)
 
-1. **Bottom-left corner.** Why: the toolbar is top, right panel is right, minimap is
-   bottom-right (when visible). Bottom-left is the only free corner that doesn't
-   overlap primary controls. Matches the minimap positioning pattern.
+1. **Always visible, bottom-left corner.** Why: the toolbar is top, right panel is
+   right, minimap is bottom-right (when visible). Bottom-left is the only free
+   corner. Always-on means new users see the reference immediately — no discovery
+   problem. Power users toggle it off in toolbar.
 
 2. **Toggle via toolbar, not settings.** Why: the legend is a canvas aid, not a
    preference. A toggle button in the toolbar (between "Fit" and "Add element")
