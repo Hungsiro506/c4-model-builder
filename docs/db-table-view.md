@@ -8,7 +8,7 @@ Keep current as the feature changes.
 > **PR B2 merged** (2026-06-25). Branch `feat/db-table-view-b2` (PR #24).
 > **PR B2.5 merged** (2026-06-26). Branch `feat/db-table-view-b2.5` (PR #25).
 > **PR table-drag submitted** (2026-06-26). Branch `feat/table-drag` (PR #26).
-> PR B3 deferred (Mermaid overlay). PR FK-edge-interact submitted (2026-06-28). Branch `feat/fk-edge-interact` (PR #27) — ready for review.
+> PR B3 deferred (Mermaid overlay). PR FK-edge-interact merged (PR #27, 2026-06-30).
 
 ## Problem
 
@@ -243,7 +243,7 @@ Types + Mermaid parser + sidecar schema + store slice. No UI.
 - FK edges set `reconnectable: false` — non-interactive for now
 - 1 unit test added. To be squash-merged as `feat: make table nodes draggable`.
 
-### 2026-06-28 — PR FK-edge-interact (PR #27) — in review
+### 2026-06-28 — PR FK-edge-interact (PR #27) — merged
 
 **What changed (7 commits):**
 - `TableNode.tsx`: hidden handles → `<NodeHandles />` (24 handles, 4 sides, hover-visible)

@@ -93,11 +93,17 @@ visible while zooming is the whole point of the request.
 5. Code level via a `CodeProvider`.
 
 Steps 1–4 are shipped. **Step 5 (code level) is deferred** — requires a
-`CodeProvider` from Pillar 3 (code-from-source generation). Also deferred:
-- **Database table view** — expand a Database container to show its table
-  schema inline (similar to code level but schema-first). Needs a
-  `DatabaseProvider` that reads table definitions from the model or from
-  an external schema source.
+`CodeProvider` from Pillar 3 (code-from-source generation).
+
+**Database table view — shipped** (PRs #24/#25/#26): expand a Database container
+to show its table schema inline, with foreign-key edges between tables and
+draggable table nodes. Note the implementation **diverged from the original
+design**: rather than a `DatabaseProvider`, tables ship as **sidecar-only
+metadata** (`TableDef` in `src/types/model.ts`, rendered by
+`src/components/canvas/nodes/TableNode.tsx`) — they are not `ModelElement`s and
+never serialize to the `.dsl`. See `docs/db-table-view.md`.
+
+Still deferred:
 - **L4 Code zoom** — expand a Component to show its code-level diagram
   (classes, functions, files). This is Pillar 1 step 5 + Pillar 3 combined.
 
