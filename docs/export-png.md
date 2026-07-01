@@ -34,6 +34,35 @@ and export only those nodes + the edges between them as a transparent PNG.
 - Export with canvas background
 - Excalidraw-style "export area" frame-drag
 
+## Known limitation — softer than a native screenshot (why, and why we keep it)
+
+The PNG is noticeably softer than a macOS screenshot of the same nodes, most
+visibly on text — even at 1× on a Retina screen (where the pixel dimensions
+already match a screenshot). This is **inherent to the approach, not a bug**:
+
+- **Excalidraw is a canvas/vector app.** Every shape/arrow/label is drawn
+  programmatically to a `<canvas>`. To export, it re-runs that same vector
+  renderer at the target scale → crisp at any size, because it *redraws vectors*.
+- **We render with React Flow = HTML/SVG DOM** (nodes are `<div>`s styled with
+  CSS). There is no vector scene to re-draw, so exporting means **rasterizing the
+  live DOM** via `html-to-image` (serialize → `foreignObject` → canvas). That
+  re-rasterization is always softer than the browser's native compositor,
+  especially fonts. A native screenshot uses the compositor directly, so it wins.
+
+**Options considered (and the verdict):**
+
+| Option | Crispness | Cost | Clipboard paste |
+| --- | --- | --- | --- |
+| Supersample PNG (2×/3×) | sharp at 3× | trivial | pastes everywhere |
+| SVG export (vector) | infinite | low — reuse `exportCanvasAsSVG` | spotty (Slack/Notion often reject) |
+| Full canvas renderer | infinite (true Excalidraw) | huge — a 2nd renderer | everywhere |
+
+**Decision (2026-07-01):** keep the current PNG-via-`html-to-image` approach at
+the user-picked scale (default 1×). The softness is accepted for now; the scale
+picker (2×/3×) is the escape hatch when a sharper image is needed. Revisit with
+**SVG export** if vector-crisp output becomes a real need — it is the cheapest way
+to get Excalidraw-grade crispness without building a second renderer.
+
 ## Key decisions (and why)
 
 1. **html-to-image for DOM → PNG.** Why: React Flow nodes are HTML elements,
