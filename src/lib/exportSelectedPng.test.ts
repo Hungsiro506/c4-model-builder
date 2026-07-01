@@ -169,6 +169,19 @@ describe('exportSelectedAsPng', () => {
 
     expect(vi.mocked(toBlob).mock.calls[0][1]?.pixelRatio).toBe(3)
   })
+
+  it('multiplies the scale by devicePixelRatio so exports stay screen-crisp', async () => {
+    const viewport = document.createElement('div')
+    vi.mocked(toBlob).mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
+    const original = window.devicePixelRatio
+    Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true })
+
+    await exportSelectedAsPng(viewport, nodes, edges, ['sys1', 'c1'], 2)
+
+    // scale 2 × dpr 2 → pixelRatio 4
+    expect(vi.mocked(toBlob).mock.calls[0][1]?.pixelRatio).toBe(4)
+    Object.defineProperty(window, 'devicePixelRatio', { value: original, configurable: true })
+  })
 })
 
 describe('copySelectedAsPng', () => {

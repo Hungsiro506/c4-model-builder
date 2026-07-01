@@ -100,12 +100,16 @@ export async function exportSelectedAsPng(
   const height = Math.ceil(bounds.height) + EXPORT_PADDING * 2
   const { x, y, zoom } = getViewportForBounds(bounds, width, height, 1, 1, 0)
 
+  // Multiply by devicePixelRatio: a bare pixelRatio of 1 would render at CSS
+  // pixels and look blurry on a HiDPI/Retina screen. This keeps 1× screen-crisp.
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+
   try {
     const { toBlob } = await import('html-to-image')
     return await toBlob(viewportEl, {
       width,
       height,
-      pixelRatio: scale,
+      pixelRatio: scale * dpr,
       style: {
         width: `${width}px`,
         height: `${height}px`,
