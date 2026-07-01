@@ -34,4 +34,37 @@ test.describe('copy selected as PNG', () => {
     // On success the button label flips to "Copied".
     await expect(workspace.page.getByText('Copied', { exact: true })).toBeVisible()
   })
+
+  test('reports failure and does not confirm when the clipboard write is denied', async ({ workspace }) => {
+    await workspace.page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    await workspace.loadSample()
+    const landscape = (await workspace.getViews()).find((view) => view.type === 'systemLandscape')
+    await workspace.setView(landscape!.key)
+
+    // Force the clipboard write to reject, mimicking a denied/failed copy.
+    await workspace.page.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, 'write', {
+        value: () => Promise.reject(new DOMException('denied', 'NotAllowedError')),
+        configurable: true,
+      })
+    })
+
+    await workspace.page.evaluate(() => {
+      type S = { selectElements: (ids: string[]) => void }
+      document.dispatchEvent(new PointerEvent('pointerdown', { button: 0, bubbles: true }))
+      const store = (window as unknown as { __testStore?: () => S }).__testStore?.()
+      store?.selectElements(['customer', 'atm'])
+      document.dispatchEvent(new PointerEvent('pointerup', { button: 0, bubbles: true }))
+    })
+    await expect(workspace.page.getByText('2 selected')).toBeVisible()
+
+    await workspace.page.getByRole('button', {
+      name: /Copy 2 elements to clipboard as a transparent PNG/,
+    }).click()
+    await workspace.page.getByRole('button', { name: /1× resolution/ }).click()
+
+    // Failure is announced; the button must NOT claim success.
+    await expect(workspace.page.getByText('Copy failed')).toBeVisible()
+    await expect(workspace.page.getByText('Copied', { exact: true })).toHaveCount(0)
+  })
 })

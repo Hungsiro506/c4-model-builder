@@ -206,6 +206,21 @@ describe('exportSelectedAsPng', () => {
     expect(dropEdge.style.display).toBe('') // restored afterwards
   })
 
+  it('restores hidden edges even when the snapshot throws (no canvas corruption)', async () => {
+    const viewport = document.createElement('div')
+    const dropEdge = document.createElement('div')
+    dropEdge.className = 'react-flow__edge'
+    dropEdge.setAttribute('data-id', 'e2') // not in keepEdgeIds → gets hidden
+    viewport.append(dropEdge)
+
+    vi.mocked(toBlob).mockRejectedValue(new Error('render boom'))
+
+    const blob = await exportSelectedAsPng(viewport, nodes, edges, ['sys1', 'c1'])
+
+    expect(blob).toBeNull() // failure surfaces as null, not a throw
+    expect(dropEdge.style.display).toBe('') // edge is NOT left hidden on the live canvas
+  })
+
   it('multiplies the scale by devicePixelRatio so exports stay screen-crisp', async () => {
     const viewport = document.createElement('div')
     vi.mocked(toBlob).mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
@@ -274,5 +289,14 @@ describe('copySelectedAsPng', () => {
 
     expect(ok).toBe(false)
     expect(writeMock).not.toHaveBeenCalled()
+  })
+
+  it('returns false (does not throw) when the clipboard write is rejected', async () => {
+    vi.mocked(toBlob).mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
+    writeMock.mockRejectedValue(new DOMException('denied', 'NotAllowedError'))
+
+    const ok = await copySelectedAsPng(document.createElement('div'), nodes, edges, ['sys1', 'c1'])
+
+    expect(ok).toBe(false)
   })
 })
