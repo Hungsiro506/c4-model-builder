@@ -213,6 +213,7 @@ function RelationshipEdge({
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto"
+            data-edge-id={id}
             data-label-density={labelDensity}
             title="Double-click to edit"
             onDoubleClick={(e) => { e.stopPropagation(); setEditingRelationship(id) }}

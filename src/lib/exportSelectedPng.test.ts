@@ -114,6 +114,15 @@ describe('makeExportFilter', () => {
     expect(filter(el('react-flow__edge', 'e2'))).toBe(false)
   })
 
+  it('keeps/drops edge labels (separate layer) by their data-edge-id', () => {
+    const keep = document.createElement('div')
+    keep.setAttribute('data-edge-id', 'e1')
+    const drop = document.createElement('div')
+    drop.setAttribute('data-edge-id', 'e2')
+    expect(filter(keep)).toBe(true)
+    expect(filter(drop)).toBe(false)
+  })
+
   it('keeps unrelated wrapper elements', () => {
     expect(filter(el('react-flow__viewport'))).toBe(true)
     expect(filter(el('some-inner-div'))).toBe(true)
@@ -168,6 +177,33 @@ describe('exportSelectedAsPng', () => {
     await exportSelectedAsPng(viewport, nodes, edges, ['sys1', 'c1'], 3)
 
     expect(vi.mocked(toBlob).mock.calls[0][1]?.pixelRatio).toBe(3)
+  })
+
+  it('hides unkept edge paths during the snapshot and restores them after', async () => {
+    // Build a viewport with the kept edge (e1) and a leaking one (e2).
+    const viewport = document.createElement('div')
+    const keepEdge = document.createElement('div')
+    keepEdge.className = 'react-flow__edge'
+    keepEdge.setAttribute('data-id', 'e1')
+    const dropEdge = document.createElement('div')
+    dropEdge.className = 'react-flow__edge'
+    dropEdge.setAttribute('data-id', 'e2')
+    viewport.append(keepEdge, dropEdge)
+
+    // Capture display state at the moment of the snapshot.
+    let keepDisplayDuring = ''
+    let dropDisplayDuring = ''
+    vi.mocked(toBlob).mockImplementation(async () => {
+      keepDisplayDuring = keepEdge.style.display
+      dropDisplayDuring = dropEdge.style.display
+      return new Blob(['png'], { type: 'image/png' })
+    })
+
+    await exportSelectedAsPng(viewport, nodes, edges, ['sys1', 'c1'])
+
+    expect(dropDisplayDuring).toBe('none') // leaking edge hidden while snapshotting
+    expect(keepDisplayDuring).toBe('') // kept edge untouched
+    expect(dropEdge.style.display).toBe('') // restored afterwards
   })
 
   it('multiplies the scale by devicePixelRatio so exports stay screen-crisp', async () => {

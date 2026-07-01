@@ -69,6 +69,10 @@ export function makeExportFilter(
       const id = el.getAttribute('data-id')
       return id != null && keepEdgeIds.has(id)
     }
+    // Edge labels render in a separate layer (react-flow__edgelabel-renderer);
+    // they carry the edge id via data-edge-id, not the react-flow__edge class.
+    const edgeLabelId = el.getAttribute('data-edge-id')
+    if (edgeLabelId != null) return keepEdgeIds.has(edgeLabelId)
     return true
   }
 }
@@ -104,6 +108,11 @@ export async function exportSelectedAsPng(
   // pixels and look blurry on a HiDPI/Retina screen. This keeps 1× screen-crisp.
   const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
 
+  // html-to-image deep-clones each <svg> wholesale, so its `filter` never sees
+  // the individual edge <g> elements — the filter alone can't drop unselected
+  // edge paths. Hide them via inline display before the snapshot, restore after.
+  const restore = hideUnkeptEdgePaths(viewportEl, keepEdgeIds)
+
   try {
     const { toBlob } = await import('html-to-image')
     return await toBlob(viewportEl, {
@@ -119,6 +128,29 @@ export async function exportSelectedAsPng(
     })
   } catch {
     return null
+  } finally {
+    restore()
+  }
+}
+
+/**
+ * Hide every `.react-flow__edge` whose id is not in `keepEdgeIds` by setting an
+ * inline `display:none` (which the SVG deep-clone carries into the snapshot).
+ * Returns a function that restores the original inline display values.
+ */
+function hideUnkeptEdgePaths(viewportEl: HTMLElement, keepEdgeIds: ReadonlySet<string>): () => void {
+  const touched: Array<{ el: HTMLElement; prev: string }> = []
+  viewportEl.querySelectorAll<HTMLElement>('.react-flow__edge').forEach((el) => {
+    const id = el.getAttribute('data-id')
+    if (id != null && keepEdgeIds.has(id)) return
+    touched.push({ el, prev: el.style.display })
+    el.style.display = 'none'
+  })
+  return () => {
+    for (const { el, prev } of touched) {
+      if (prev) el.style.display = prev
+      else el.style.removeProperty('display')
+    }
   }
 }
 
