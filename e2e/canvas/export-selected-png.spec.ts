@@ -1,12 +1,14 @@
 import { test, expect } from '../fixtures/workspace'
 
 /**
- * Export-selected-as-PNG (docs/export-png.md):
- *  - the multi-select bar exposes a "PNG" action,
- *  - clicking it triggers a .png download whose name derives from the workspace.
+ * Copy-selected-as-PNG (docs/export-png.md):
+ *  - the multi-select bar exposes a "PNG" action with a 1×/2×/3× scale menu,
+ *  - picking a scale copies the selection to the clipboard and confirms.
  */
-test.describe('export selected as PNG', () => {
-  test('PNG button on the multi-select bar triggers a download', async ({ workspace }) => {
+test.describe('copy selected as PNG', () => {
+  test('PNG menu copies the selection to the clipboard', async ({ workspace }) => {
+    await workspace.page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+
     await workspace.loadSample()
     const landscape = (await workspace.getViews()).find((view) => view.type === 'systemLandscape')
     expect(landscape).toBeTruthy()
@@ -23,15 +25,13 @@ test.describe('export selected as PNG', () => {
 
     await expect(workspace.page.getByText('2 selected')).toBeVisible()
 
-    const exportButton = workspace.page.getByRole('button', {
-      name: /Export 2 elements as a transparent PNG/,
-    })
-    await expect(exportButton).toBeVisible()
+    // Open the PNG scale menu and pick 2×.
+    await workspace.page.getByRole('button', {
+      name: /Copy 2 elements to clipboard as a transparent PNG/,
+    }).click()
+    await workspace.page.getByRole('button', { name: /2× resolution/ }).click()
 
-    const downloadPromise = workspace.page.waitForEvent('download')
-    await exportButton.click()
-    const download = await downloadPromise
-
-    expect(download.suggestedFilename()).toMatch(/\.png$/)
+    // On success the button label flips to "Copied".
+    await expect(workspace.page.getByText('Copied', { exact: true })).toBeVisible()
   })
 })

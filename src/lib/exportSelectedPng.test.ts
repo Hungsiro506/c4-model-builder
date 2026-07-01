@@ -5,6 +5,7 @@ import {
   selectExportEdgeIds,
   makeExportFilter,
   exportSelectedAsPng,
+  copySelectedAsPng,
 } from './exportSelectedPng'
 
 vi.mock('html-to-image', () => ({
@@ -141,7 +142,7 @@ describe('exportSelectedAsPng', () => {
     expect(toBlob).not.toHaveBeenCalled()
   })
 
-  it('renders the viewport with a transparent background at 1x', async () => {
+  it('renders the viewport transparent at 1x by default with 10px padding', async () => {
     const viewport = document.createElement('div')
     const expected = new Blob(['png'], { type: 'image/png' })
     vi.mocked(toBlob).mockResolvedValue(expected)
@@ -155,5 +156,74 @@ describe('exportSelectedAsPng', () => {
     expect(opts?.backgroundColor).toBeUndefined()
     expect(opts?.pixelRatio).toBe(1)
     expect(typeof opts?.filter).toBe('function')
+    // nodes are 100x60 at (0,0) → bbox 100x60, + 10px padding each side.
+    expect(opts?.width).toBe(120)
+    expect(opts?.height).toBe(80)
+  })
+
+  it('passes the chosen scale through as pixelRatio', async () => {
+    const viewport = document.createElement('div')
+    vi.mocked(toBlob).mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
+
+    await exportSelectedAsPng(viewport, nodes, edges, ['sys1', 'c1'], 3)
+
+    expect(vi.mocked(toBlob).mock.calls[0][1]?.pixelRatio).toBe(3)
+  })
+})
+
+describe('copySelectedAsPng', () => {
+  const nodes = [
+    node('sys1', 'softwareSystem'),
+    node('c1', 'container'),
+    node('group-a', 'group'),
+  ]
+  const edges = [edge('e1', 'sys1', 'c1')]
+  let writeMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.mocked(toBlob).mockReset()
+    writeMock = vi.fn().mockResolvedValue(undefined)
+    // jsdom ships neither ClipboardItem nor a writable clipboard.
+    ;(globalThis as unknown as { ClipboardItem: unknown }).ClipboardItem =
+      vi.fn(function ClipboardItem(this: { items: unknown }, items: unknown) {
+        this.items = items
+      })
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { write: writeMock },
+      configurable: true,
+    })
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('returns false and skips the clipboard when nothing is exportable', async () => {
+    const ok = await copySelectedAsPng(document.createElement('div'), nodes, edges, ['group-a'])
+    expect(ok).toBe(false)
+    expect(toBlob).not.toHaveBeenCalled()
+    expect(writeMock).not.toHaveBeenCalled()
+  })
+
+  it('writes a PNG ClipboardItem and returns true, honoring scale', async () => {
+    vi.mocked(toBlob).mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
+
+    const ok = await copySelectedAsPng(document.createElement('div'), nodes, edges, ['sys1', 'c1'], 2)
+
+    expect(ok).toBe(true)
+    expect(vi.mocked(toBlob).mock.calls[0][1]?.pixelRatio).toBe(2)
+    expect(writeMock).toHaveBeenCalledOnce()
+    const ClipboardItemMock = (globalThis as unknown as { ClipboardItem: ReturnType<typeof vi.fn> }).ClipboardItem
+    expect(ClipboardItemMock).toHaveBeenCalledWith(
+      expect.objectContaining({ 'image/png': expect.any(Blob) }),
+    )
+  })
+
+  it('returns false when the snapshot yields no blob', async () => {
+    vi.mocked(toBlob).mockResolvedValue(null)
+
+    const ok = await copySelectedAsPng(document.createElement('div'), nodes, edges, ['sys1', 'c1'])
+
+    expect(ok).toBe(false)
+    expect(writeMock).not.toHaveBeenCalled()
   })
 })

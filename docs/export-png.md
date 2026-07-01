@@ -17,16 +17,19 @@ and export only those nodes + the edges between them as a transparent PNG.
 
 - **Select nodes** via click, shift+click, or rubber-band drag (same multi-select already in the app)
 - **Export selected nodes + edges between them** — edges where both endpoints are selected
+- **Copy to clipboard** — the PNG goes to the clipboard (paste into Slack/Notion/docs), no file download
 - **PNG only** — no SVG/JPEG in v1
 - **Transparent background** — no canvas grid, no theme background
-- **1x resolution** — screen resolution, no retina scaling in v1
+- **1×/2×/3× scale picker, default 1×** — matches Excalidraw's export scale (scale is the quality lever; PNG is lossless)
+- **10px crop padding** — matches Excalidraw's default export padding
 - **Boundary boxes excluded** — only content nodes and their edges, no scope/expand wrappers
 - **Table nodes included** — if a table inside an expanded DB container is selected, it gets exported
 
 ## Out of scope (deferred)
 
 - SVG / JPEG formats
-- Retina (2x/3x) scaling
+- File download (clipboard only for v1)
+- Right-click context-menu entry (menu lives on the multi-select bar)
 - Export entire view / visible area
 - Export with canvas background
 - Excalidraw-style "export area" frame-drag
@@ -95,26 +98,33 @@ and export only those nodes + the edges between them as a transparent PNG.
 
 - `src/lib/exportSelectedPng.test.ts` — unit: node/edge filtering (overlay
   exclusion, both-endpoints edge rule, synthetic table ids), the `html-to-image`
-  filter predicate, and the `toBlob` call shape (transparent, 1x).
-- `e2e/canvas/export-selected-png.spec.ts` — E2E: select nodes → click the
-  multi-select-bar "PNG" action → verify a `.png` download is triggered.
+  filter predicate, the `toBlob` call shape (transparent, 10px padding, scale →
+  pixelRatio), and `copySelectedAsPng` writing a PNG `ClipboardItem`.
+- `e2e/canvas/export-selected-png.spec.ts` — E2E: select nodes → open the
+  multi-select-bar "PNG" menu → pick 2× → verify the clipboard copy confirms.
 
 ## Open items
 
-- Keyboard shortcut for export (Ctrl+Shift+E?)
-- Export progress indicator for large selections
-- Copy to clipboard instead of download
-- Crop padding config (fixed 16px or user-adjustable)
+- Keyboard shortcut for copy (Ctrl+Shift+C?)
+- File-download variant (v1 is clipboard only)
 - Single-node export (the bar only appears at 2+ selection; v1 ships multi only)
 
 ## Progress log
 
-### 2026-06-30 — shipped (branch `feat/export-selected-png`)
+### 2026-06-30 — first cut (branch `feat/export-selected-png`)
 
 - `src/lib/exportSelectedPng.ts` — pure filters (`selectExportNodeIds`,
-  `selectExportEdgeIds`, `makeExportFilter`) + `exportSelectedAsPng` /
-  `downloadSelectedAsPng`. Filter-live-viewport approach (decision #2), 1x,
-  transparent.
+  `selectExportEdgeIds`, `makeExportFilter`) + `exportSelectedAsPng`.
+  Filter-live-viewport approach (decision #2), 1x, transparent, download.
 - Wired a "PNG" action into `src/components/layout/MultiSelectBar.tsx` (visible
   on 2+ selection). Passes `reactFlow.getNodesBounds` for sub-flow correctness.
-- 15 unit tests + 1 E2E. `npm run typecheck` + build clean.
+
+### 2026-07-01 — reworked to match Excalidraw
+
+- Swapped download → **clipboard** (`copySelectedAsPng`, `ClipboardItem` +
+  `navigator.clipboard.write`).
+- Added **1×/2×/3× scale picker** (default 1×) → `pixelRatio`; the bar's PNG
+  button now opens a small scale flyout, then confirms with a "Copied" label +
+  `announce()`.
+- Crop **padding 16 → 10** to match Excalidraw.
+- 19 unit tests + 1 E2E. `npm run typecheck` + build clean.

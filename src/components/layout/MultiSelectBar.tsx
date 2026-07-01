@@ -19,7 +19,8 @@ import {
   ChevronDown,
   ImageDown,
 } from 'lucide-react'
-import { downloadSelectedAsPng } from '@/lib/exportSelectedPng'
+import { copySelectedAsPng, type ExportScale } from '@/lib/exportSelectedPng'
+import { announce } from '@/lib/announce'
 
 type AlignMode = 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom'
 type LayoutAxis = 'horizontal' | 'vertical'
@@ -64,6 +65,8 @@ export default function MultiSelectBar() {
   const updateNodePositions = useWorkspaceStore((s) => s.updateNodePositions)
   const reactFlow = useReactFlow()
   const [alignOpen, setAlignOpen] = useState(false)
+  const [pngOpen, setPngOpen] = useState(false)
+  const [pngCopied, setPngCopied] = useState(false)
   const [primaryPointerDown, setPrimaryPointerDown] = useState(false)
   const count = selectedElementIds.length
 
@@ -337,18 +340,24 @@ export default function MultiSelectBar() {
     applyLayoutPositions(straightened)
   }
 
-  async function handleExportPng() {
+  async function handleCopyPng(scale: ExportScale) {
+    setPngOpen(false)
     const viewport = document.querySelector<HTMLElement>('.react-flow__viewport')
     if (!viewport) return
-    const filename = `${workspace?.name ?? 'workspace'}-selection.png`
-    await downloadSelectedAsPng(
+    const ok = await copySelectedAsPng(
       viewport,
       reactFlow.getNodes(),
       reactFlow.getEdges(),
       selectedElementIds,
-      filename,
+      scale,
       reactFlow.getNodesBounds, // hook version handles sub-flow offsets
     )
+    const msg = ok ? `Copied PNG (${scale}×)` : 'Copy failed'
+    announce(msg)
+    if (ok) {
+      setPngCopied(true)
+      setTimeout(() => setPngCopied(false), 1600)
+    }
   }
 
   const btnStyle: React.CSSProperties = {
@@ -470,15 +479,56 @@ export default function MultiSelectBar() {
 
         {sep}
 
-        {/* Export selection as transparent PNG */}
-        <button className="hover-lift" style={btnStyle}
-          title={`Export ${count} elements as a transparent PNG`}
-          aria-label={`Export ${count} elements as a transparent PNG`}
-          onClick={handleExportPng}
-        >
-          <ImageDown size={14} />
-          <span>PNG</span>
-        </button>
+        {/* Copy selection to clipboard as a transparent PNG (pick scale) */}
+        <div style={{ position: 'relative', height: '100%', flexShrink: 0 }}>
+          <button className="hover-lift" style={{ ...btnStyle, paddingRight: 8 }}
+            title={`Copy ${count} elements to clipboard as a transparent PNG`}
+            aria-label={`Copy ${count} elements to clipboard as a transparent PNG`}
+            onClick={() => setPngOpen(o => !o)}
+          >
+            <ImageDown size={14} />
+            <span>{pngCopied ? 'Copied' : 'PNG'}</span>
+            <ChevronDown size={11} style={{ opacity: 0.6 }} />
+          </button>
+          {pngOpen && (
+            <>
+              <button
+                type="button"
+                aria-label="Close PNG menu"
+                onClick={() => setPngOpen(false)}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 53,
+                  background: 'transparent', border: 'none', padding: 0, cursor: 'default',
+                }}
+              />
+              <div className="glass-flyout" style={{
+                position: 'absolute',
+                ...(alignOpenDownward
+                  ? { top: '100%', marginTop: 6 }
+                  : { bottom: '100%', marginBottom: 6 }),
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 54,
+                padding: 4,
+                minWidth: 150,
+              }}>
+                <div style={{ padding: '4px 10px 6px', fontSize: 'var(--text-xxs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text-muted)' }}>
+                  Copy as PNG
+                </div>
+                {([1, 2, 3] as const).map((scale) => (
+                  <button
+                    key={scale}
+                    onClick={() => handleCopyPng(scale)}
+                    className="flyout-item"
+                  >
+                    <span className="flyout-item-icon"><ImageDown size={14} /></span>
+                    <span className="flyout-item-label">{scale}× resolution</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
         {sep}
 

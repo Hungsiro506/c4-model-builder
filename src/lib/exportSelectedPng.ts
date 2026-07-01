@@ -1,12 +1,11 @@
 import { getNodesBounds, getViewportForBounds, type Node, type Edge, type Rect } from '@xyflow/react'
-import { downloadBlob } from './exportUtils'
 
-// Export selected nodes + the edges between them as a transparent PNG, by
-// filtering the live `.react-flow__viewport` (not an off-screen clone).
-// See docs/export-png.md.
+// Copy selected nodes + the edges between them to the clipboard as a transparent
+// PNG, by filtering the live `.react-flow__viewport` (not an off-screen clone).
+// Matches Excalidraw's export: tight crop + 1x/2x/3x scale. See docs/export-png.md.
 
 const OVERLAY_NODE_TYPES = new Set(['group', 'boundary'])
-const EXPORT_PADDING = 16
+const EXPORT_PADDING = 10 // px, matches Excalidraw's default export padding
 
 interface ExportNode {
   id: string
@@ -75,6 +74,11 @@ export function makeExportFilter(
 }
 
 /**
+ * The user-selectable export scale (Excalidraw's 1x/2x/3x). Maps to pixelRatio.
+ */
+export type ExportScale = 1 | 2 | 3
+
+/**
  * Returns null when nothing exportable is selected. Callers with sub-flow nodes
  * (container children, `__table__*`) must pass `reactFlow.getNodesBounds` —
  * standalone `getNodesBounds` cannot resolve parent offsets.
@@ -84,6 +88,7 @@ export async function exportSelectedAsPng(
   nodes: readonly Node[],
   edges: readonly Edge[],
   selectedIds: readonly string[],
+  scale: ExportScale = 1,
   computeBounds: (nodes: Node[]) => Rect = getNodesBounds,
 ): Promise<Blob | null> {
   const keepNodeIds = selectExportNodeIds(nodes, selectedIds)
@@ -100,7 +105,7 @@ export async function exportSelectedAsPng(
     return await toBlob(viewportEl, {
       width,
       height,
-      pixelRatio: 1,
+      pixelRatio: scale,
       style: {
         width: `${width}px`,
         height: `${height}px`,
@@ -113,17 +118,24 @@ export async function exportSelectedAsPng(
   }
 }
 
-/** Export the selection and trigger a download; false when nothing to export. */
-export async function downloadSelectedAsPng(
+/**
+ * Copy the selection to the clipboard as a PNG. Returns false when there is
+ * nothing to export or the clipboard write fails.
+ */
+export async function copySelectedAsPng(
   viewportEl: HTMLElement,
   nodes: readonly Node[],
   edges: readonly Edge[],
   selectedIds: readonly string[],
-  filename = 'selection.png',
+  scale: ExportScale = 1,
   computeBounds: (nodes: Node[]) => Rect = getNodesBounds,
 ): Promise<boolean> {
-  const blob = await exportSelectedAsPng(viewportEl, nodes, edges, selectedIds, computeBounds)
-  if (!blob) return false
-  downloadBlob(blob, filename)
-  return true
+  try {
+    const blob = await exportSelectedAsPng(viewportEl, nodes, edges, selectedIds, scale, computeBounds)
+    if (!blob) return false
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+    return true
+  } catch {
+    return false
+  }
 }
