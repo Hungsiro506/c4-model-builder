@@ -79,6 +79,36 @@ describe('extractSidecar', () => {
     expect(result!.views?.['sl1']?.elements?.['alice']?.pinned).toBe(true)
   })
 
+  it('captures shiftExempt on pinned view elements and round-trips it', () => {
+    const ws = makeWorkspace()
+    const el = ws.views.systemLandscapeViews[0].elements[0]
+    el.pinned = true
+    el.x = 120
+    el.y = 340
+    el.shiftExempt = ['dataStore', 'rms']
+    const result = extractSidecar(ws)
+    expect(result!.views?.['sl1']?.elements?.['alice']?.shiftExempt).toEqual(['dataStore', 'rms'])
+
+    // Round-trip: serialize → parse → apply onto a fresh workspace.
+    const parsed = parseSidecar(serializeSidecar(result!))
+    expect(parsed).not.toBeNull()
+    const ws2 = makeWorkspace()
+    applySidecar(ws2, parsed!)
+    const el2 = ws2.views.systemLandscapeViews[0].elements[0]
+    expect(el2.pinned).toBe(true)
+    expect(el2.x).toBe(120)
+    expect(el2.y).toBe(340)
+    expect(el2.shiftExempt).toEqual(['dataStore', 'rms'])
+  })
+
+  it('rejects sidecar with non-string shiftExempt entries', () => {
+    const json = JSON.stringify({
+      version: 1,
+      views: { sl1: { elements: { alice: { pinned: true, shiftExempt: [42] } } } },
+    })
+    expect(parseSidecar(json)).toBeNull()
+  })
+
   it('version is always 1 when there is sidecar data', () => {
     const ws = makeWorkspace()
     ws.views.systemLandscapeViews[0].elements[0].pinned = true

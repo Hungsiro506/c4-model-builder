@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { Position } from '@xyflow/react'
+import { Position, ReactFlowProvider } from '@xyflow/react'
 import RelationshipEdge from './RelationshipEdge'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
 
@@ -60,19 +60,23 @@ describe('RelationshipEdge density handling', () => {
 
   it('renders compact previews and restores the full tooltip on hover', () => {
     const { container } = render(
-      <svg>
-        <RelationshipEdge
-          id="edge-1"
-          sourceX={0}
-          sourceY={0}
-          targetX={120}
-          targetY={0}
-          sourcePosition={Position.Right}
-          targetPosition={Position.Left}
-          selected={false}
-          data={{ relationship: { ...relationship, lineStyle: 'Orthogonal' } }}
-        />
-      </svg>,
+      <ReactFlowProvider>
+        <svg>
+          <RelationshipEdge
+            id="edge-1"
+            source="source"
+            target="target"
+            sourceX={0}
+            sourceY={0}
+            targetX={120}
+            targetY={0}
+            sourcePosition={Position.Right}
+            targetPosition={Position.Left}
+            selected={false}
+            data={{ relationship: { ...relationship, lineStyle: 'Orthogonal' } }}
+          />
+        </svg>
+      </ReactFlowProvider>,
     )
 
     const label = container.querySelector('[data-label-density="compact"]') as HTMLElement | null

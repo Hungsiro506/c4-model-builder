@@ -33,6 +33,8 @@ interface SidecarViewElement {
   pinned?: boolean
   x?: number
   y?: number
+  /** Expanded element ids whose gap-shift is baked into x/y (dragged while expanded). */
+  shiftExempt?: string[]
 }
 
 interface SidecarExpandedElement {
@@ -100,6 +102,8 @@ function isSidecarViewElement(value: unknown): value is SidecarViewElement {
   if ('pinned' in value && value.pinned !== undefined && typeof value.pinned !== 'boolean') return false
   if ('x' in value && value.x !== undefined && !isFiniteNumber(value.x)) return false
   if ('y' in value && value.y !== undefined && !isFiniteNumber(value.y)) return false
+  if ('shiftExempt' in value && value.shiftExempt !== undefined
+    && !(Array.isArray(value.shiftExempt) && value.shiftExempt.every((id) => typeof id === 'string'))) return false
   return true
 }
 
@@ -188,6 +192,7 @@ export function extractSidecar(
         const entry: SidecarViewElement = { pinned: true }
         if (el.x !== undefined) entry.x = el.x
         if (el.y !== undefined) entry.y = el.y
+        if (el.shiftExempt?.length) entry.shiftExempt = [...el.shiftExempt]
         viewElements[el.id] = entry
         hasData = true
       }
@@ -315,6 +320,9 @@ export function applySidecar(workspace: Workspace, sidecar: SidecarData): {
             el.pinned = true
             if (isFiniteNumber(elData.x)) el.x = elData.x
             if (isFiniteNumber(elData.y)) el.y = elData.y
+            if (Array.isArray(elData.shiftExempt) && elData.shiftExempt.length > 0) {
+              el.shiftExempt = elData.shiftExempt.filter((id): id is string => typeof id === 'string')
+            }
           }
         }
       }

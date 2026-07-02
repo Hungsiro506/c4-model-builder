@@ -203,12 +203,34 @@ function sameOverlayGeometry(a: Node, b: Node): boolean {
  *  put and the user can still place a sibling by hand. Used by both the layout
  *  memo (on expand) and the live drag rebuild (so dragging a child outward, which
  *  grows the wrapper, slides overlapping siblings away in real time). */
+/** Stable empty map for the no-workspace memo path (keeps effect deps quiet). */
+const EMPTY_PRE_SHIFT_POSITIONS = new Map<string, { x: number; y: number }>()
+
+/** Map expandedId → node ids whose saved position already includes that
+ *  expansion's gap-shift (they were dragged while it was active). The expand
+ *  pipeline must not move them for that box again — the stored coordinate is
+ *  the live one, and re-shifting builds edges for a phantom position. */
+function buildShiftExemptMap(view: View | undefined): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>()
+  if (!view) return map
+  for (const el of view.elements) {
+    if (!el.shiftExempt?.length) continue
+    for (const expandedId of el.shiftExempt) {
+      let ids = map.get(expandedId)
+      if (!ids) { ids = new Set(); map.set(expandedId, ids) }
+      ids.add(el.id)
+    }
+  }
+  return map
+}
+
 function pushSiblingsClearOfWrappers(
   contentNodes: Node[],
   expandedIds: Set<string>,
   workspace: Workspace,
   direction: string,
   draggedId?: string,
+  shiftExempt?: Map<string, Set<string>>,
 ): Node[] {
   if (expandedIds.size === 0) return contentNodes
   const tData = useWorkspaceStore.getState().tableData
@@ -238,8 +260,10 @@ function pushSiblingsClearOfWrappers(
     width: n.measured?.width ?? (Number(n.style?.width) || 200),
     height: n.measured?.height ?? (Number(n.style?.height) || 100),
   }))
-  for (const rect of realRects.values()) {
-    pushed = gapShiftCrossRect(pushed, rect, axis, excludeIds)
+  for (const [expandedId, rect] of realRects) {
+    const exempt = shiftExempt?.get(expandedId)
+    const exclude = exempt && exempt.size > 0 ? new Set([...excludeIds, ...exempt]) : excludeIds
+    pushed = gapShiftCrossRect(pushed, rect, axis, exclude)
   }
   const pushedById = new Map(pushed.map((n) => [n.id, n.position]))
   return contentNodes.map((n) => ({ ...n, position: pushedById.get(n.id) ?? n.position }))
@@ -249,7 +273,7 @@ function rebuildNodesWithOverlays(workspace: Workspace, view: View | undefined, 
   const rawContent = nodes.filter((n) => !isOverlayNode(n))
   // Push outside siblings clear of any wrapper grown by a dragged-out child, so
   // overlays (and the returned content) reflect the final positions.
-  const contentOnly = pushSiblingsClearOfWrappers(rawContent, expandedIds, workspace, view?.autoLayout?.direction ?? 'TB', draggedId)
+  const contentOnly = pushSiblingsClearOfWrappers(rawContent, expandedIds, workspace, view?.autoLayout?.direction ?? 'TB', draggedId, buildShiftExemptMap(view))
   const previousOverlays = new Map(nodes.filter(isOverlayNode).map((n) => [n.id, n]))
   const boundaryClusters = view ? buildBoundaryLayoutClusters(workspace, view) : []
   const updatedGroups = buildGroupNodes(workspace, workspace.model.groups, contentOnly, boundaryClusters)
@@ -451,8 +475,8 @@ export default function Canvas() {
     return map
   }, [viewStructureKey])
 
-  const { initialNodes, initialEdges } = useMemo(() => {
-    if (!workspace || !view) return { initialNodes: [], initialEdges: [] }
+  const { initialNodes, initialEdges, preShiftPositions } = useMemo(() => {
+    if (!workspace || !view) return { initialNodes: [], initialEdges: [], preShiftPositions: EMPTY_PRE_SHIFT_POSITIONS }
     const direction = view.autoLayout?.direction ?? 'TB'
 
     // 1. Build nodes with raw positions from view
@@ -506,7 +530,14 @@ export default function Canvas() {
       // plus EXPAND_MARGIN so the next rank isn't flush against the grown box.
       const primaryShifts = growth.map((g) => {
         const grow = axis === 'x' ? Math.max(0, g.width - 200) : Math.max(0, g.height - 100)
-        return { expandedId: g.expandedId, delta: grow > 0 ? grow + EXPAND_MARGIN : 0 }
+        return {
+          expandedId: g.expandedId,
+          delta: grow > 0 ? grow + EXPAND_MARGIN : 0,
+          // Scope the flow-axis shift to nodes overlapping the grown box on the
+          // cross axis — a sibling far beside the box needs no room and must
+          // not be thrown down/across the canvas.
+          grownCrossSize: axis === 'x' ? g.height : g.width,
+        }
       })
       const layoutNodesForShift = laidOut.map((n) => ({
         id: n.id,
@@ -514,12 +545,17 @@ export default function Canvas() {
         width: n.measured?.width ?? (Number(n.style?.width) || 200),
         height: n.measured?.height ?? (Number(n.style?.height) || 100),
       }))
-      let shifted = gapShiftMany(layoutNodesForShift, primaryShifts, axis)
+      // Nodes dragged while an expansion was active persisted their LIVE
+      // (already-shifted) position — exempt them from that expansion's shifts
+      // or the pipeline displaces them twice: edges then anchor to the phantom
+      // position and the node teleports on the next structural rebuild.
+      const shiftExempt = buildShiftExemptMap(view)
+      let shifted = gapShiftMany(layoutNodesForShift, primaryShifts, axis, shiftExempt)
       // Cross axis: push any sibling that overlaps a grown box's footprint clear
       // of it. Covers same-rank neighbours the flow-axis shift never touched and
       // siblings the user dragged near/onto the box.
       for (const g of growth) {
-        shifted = gapShiftCross(shifted, g.expandedId, g.width, g.height, axis)
+        shifted = gapShiftCross(shifted, g.expandedId, g.width, g.height, axis, shiftExempt.get(g.expandedId))
       }
       const shiftedById = new Map(shifted.map((n) => [n.id, n.position]))
       const shiftedLaidOut = laidOut.map((n) => ({ ...n, position: shiftedById.get(n.id) ?? n.position }))
@@ -546,7 +582,7 @@ export default function Canvas() {
       // sibling fully clear of each box's true rect (same source as the drawn
       // boundary). Members are excluded so a wrapper's own children aren't shoved
       // out of their own wrapper.
-      expandedNodes = pushSiblingsClearOfWrappers(expandedNodes, new Set(expandedElementIds), workspace, direction)
+      expandedNodes = pushSiblingsClearOfWrappers(expandedNodes, new Set(expandedElementIds), workspace, direction, undefined, shiftExempt)
     }
 
     // 4. Build group background nodes and scope boundary using post-layout positions
@@ -577,7 +613,13 @@ export default function Canvas() {
     }
     const edges = [...modelEdges, ...fkEdges]
 
-    return { initialNodes: allNodes, initialEdges: edges }
+    // Pre-shift (dagre) positions, used to canonicalize missing view.elements
+    // coordinates. The final node positions include the expansion gap-shift,
+    // which the pipeline re-applies on every rebuild — persisting them would
+    // shift those nodes twice.
+    const preShift = new Map(laidOut.map((n) => [n.id, n.position]))
+
+    return { initialNodes: allNodes, initialEdges: edges, preShiftPositions: preShift }
   }, [workspace, view, stableDrillInto, highlightFilters, viewCountMap, themeStyles, reactFlowInstance, expandedElementIds, tableData, fkEdgesState])
 
   // Canonicalize the initial dagre layout: write computed positions back to
@@ -593,13 +635,14 @@ export default function Canvas() {
     const updates = new Map<string, { x: number; y: number }>()
     for (const ve of view.elements) {
       if (ve.x !== undefined && ve.y !== undefined) continue
-      const node = initialNodes.find(n => n.id === ve.id)
-      if (node && node.position) {
-        updates.set(ve.id, { x: node.position.x, y: node.position.y })
-      }
+      // Canonicalize from the PRE-shift layout: view.elements coordinates are
+      // pre-shift space (the expand pipeline re-applies its gap-shift on every
+      // rebuild), so persisting a post-shift position would shift it twice.
+      const pos = preShiftPositions.get(ve.id)
+      if (pos) updates.set(ve.id, { x: pos.x, y: pos.y })
     }
     if (updates.size > 0) syncAutoLayoutPositions(view.key, updates)
-  }, [initialNodes, view, syncAutoLayoutPositions])
+  }, [preShiftPositions, view, syncAutoLayoutPositions])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
