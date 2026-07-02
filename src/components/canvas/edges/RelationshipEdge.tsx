@@ -6,11 +6,14 @@ import {
   getBezierPath,
   getStraightPath,
   Position,
+  useInternalNode,
   type EdgeProps,
 } from '@xyflow/react'
 import type { Relationship, RelationshipStyle } from '@/types/model'
 import { useWorkspaceStore } from '@/store/workspace'
 import { getEdgeLabelDensity, truncateEdgeLabel } from './relationshipEdgeLabels'
+import { EXPAND_BOUNDARY_PREFIX } from '../canvasBuilders'
+import { floatingBorderPoint, type FloatRect } from './edgeFloating'
 
 interface RelationshipEdgeData {
   relationship: Relationship
@@ -38,20 +41,63 @@ function snapToNode(x: number, y: number, pos: Position, offset: number): [numbe
   }
 }
 
+/** Absolute rect of an internal RF node, or null if not measured yet. */
+function internalRect(node: ReturnType<typeof useInternalNode>): FloatRect | null {
+  if (!node) return null
+  const w = node.measured?.width
+  const h = node.measured?.height
+  if (!w || !h) return null
+  return { x: node.internals.positionAbsolute.x, y: node.internals.positionAbsolute.y, width: w, height: h }
+}
+
+const isExpandBoundary = (id: string | null | undefined): boolean =>
+  typeof id === 'string' && id.startsWith(EXPAND_BOUNDARY_PREFIX)
+
 function RelationshipEdge({
   id,
+  source,
+  target,
   sourceX: rawSrcX,
   sourceY: rawSrcY,
   targetX: rawTgtX,
   targetY: rawTgtY,
-  sourcePosition,
-  targetPosition,
+  sourcePosition: rawSourcePosition,
+  targetPosition: rawTargetPosition,
   data,
   selected,
   style: edgeStyle,
 }: EdgeProps & { data?: RelationshipEdgeData }) {
   const relationship = data?.relationship
   const relStyle = data?.relationshipStyle
+
+  // Floating endpoints for expanded-boundary boxes. A fixed 25/50/75% handle
+  // slot sits at the box's vertical middle, so an edge from a small sibling
+  // dives down a tall boundary. When an endpoint is a boundary, re-anchor it to
+  // the point on the box border facing the OTHER endpoint, at that endpoint's
+  // level — so the edge reads the same as before the box expanded. Normal
+  // node↔node edges keep their handle slots (needed for fan-out overlap).
+  const sourceNode = useInternalNode(source)
+  const targetNode = useInternalNode(target)
+  let srcX = rawSrcX, srcY = rawSrcY, tgtX = rawTgtX, tgtY = rawTgtY
+  let sourcePosition = rawSourcePosition, targetPosition = rawTargetPosition
+  const srcRect = internalRect(sourceNode)
+  const tgtRect = internalRect(targetNode)
+  // Aim each floating endpoint at the other endpoint's current point. Resolve
+  // the boundary endpoints from the fixed points first so a boundary↔boundary
+  // edge still aims at sensible targets.
+  if (isExpandBoundary(target) && tgtRect) {
+    const p = floatingBorderPoint(tgtRect, { x: rawSrcX, y: rawSrcY })
+    tgtX = p.x; tgtY = p.y; targetPosition = p.position
+  }
+  if (isExpandBoundary(source) && srcRect) {
+    const p = floatingBorderPoint(srcRect, { x: tgtX, y: tgtY })
+    srcX = p.x; srcY = p.y; sourcePosition = p.position
+  }
+  // Re-aim the target now that a floating source may have moved (boundary↔boundary).
+  if (isExpandBoundary(target) && tgtRect && isExpandBoundary(source)) {
+    const p = floatingBorderPoint(tgtRect, { x: srcX, y: srcY })
+    tgtX = p.x; tgtY = p.y; targetPosition = p.position
+  }
   const isAsync = relationship?.interactionStyle === 'Asynchronous'
   const lineStyle = relationship?.lineStyle
 
@@ -86,8 +132,15 @@ function RelationshipEdge({
     setEditingRelationship(null)
   }
 
-  const [sourceX, sourceY] = snapToNode(rawSrcX, rawSrcY, sourcePosition, SRC_OFFSET)
-  const [targetX, targetY] = snapToNode(rawTgtX, rawTgtY, targetPosition, TGT_OFFSET)
+  // Floating boundary endpoints already sit exactly on the box border — no
+  // handle protrudes there, so skip the inward snap (which compensates for the
+  // handle radius on normal nodes).
+  const [sourceX, sourceY] = isExpandBoundary(source)
+    ? [srcX, srcY]
+    : snapToNode(srcX, srcY, sourcePosition, SRC_OFFSET)
+  const [targetX, targetY] = isExpandBoundary(target)
+    ? [tgtX, tgtY]
+    : snapToNode(tgtX, tgtY, targetPosition, TGT_OFFSET)
 
   // Choose path function based on lineStyle
   let edgePath: string
