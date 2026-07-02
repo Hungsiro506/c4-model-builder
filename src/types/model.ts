@@ -107,6 +107,13 @@ export interface ElementInView {
   y?: number
   /** True when the user has manually dragged this node */
   pinned?: boolean
+  /** Expanded element ids whose expand-in-place gap-shift is already baked into
+   *  x/y. Set when the node was dragged while those expansions were active:
+   *  drag-stop persists the LIVE (post-shift) position, so the layout pipeline
+   *  must not apply those expansions' gap-shift to this node again — doing so
+   *  builds edges for a phantom position and teleports the node on the next
+   *  structural rebuild. Sidecar-persisted, never serialized to DSL. */
+  shiftExempt?: string[]
 }
 
 export interface RelationshipInView {

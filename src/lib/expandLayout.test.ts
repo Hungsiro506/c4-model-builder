@@ -36,6 +36,40 @@ describe('gapShift (vertical / TB)', () => {
   })
 })
 
+describe('gapShift — shift exemption (position saved while expanded)', () => {
+  const nodes = [
+    n('box', 0, 0),
+    n('below', 0, 200),
+    n('draggedWhileExpanded', 100, 300),
+  ]
+
+  it('does not move exempt nodes (their saved position already includes the shift)', () => {
+    const out = gapShift(nodes, 'box', 150, 'y', new Set(['draggedWhileExpanded']))
+    expect(out.find((x) => x.id === 'draggedWhileExpanded')!.position.y).toBe(300)
+    // Non-exempt nodes still shift.
+    expect(out.find((x) => x.id === 'below')!.position.y).toBe(350)
+  })
+
+  it('gapShiftMany applies exemption per expanded box', () => {
+    const exempt = new Map([['box', new Set(['draggedWhileExpanded'])]])
+    const out = gapShiftMany(nodes, [{ expandedId: 'box', delta: 150 }], 'y', exempt)
+    expect(out.find((x) => x.id === 'draggedWhileExpanded')!.position.y).toBe(300)
+    expect(out.find((x) => x.id === 'below')!.position.y).toBe(350)
+  })
+
+  it('gapShiftCross skips exempt nodes overlapping the grown rect', () => {
+    // Grown box 0..400 x 0..400 overlaps both siblings; only the exempt one stays.
+    const overlapping = [
+      n('box', 0, 0),
+      n('sib', 250, 150),
+      n('draggedWhileExpanded', 250, 250),
+    ]
+    const out = gapShiftCross(overlapping, 'box', 400, 400, 'y', new Set(['draggedWhileExpanded']))
+    expect(out.find((x) => x.id === 'draggedWhileExpanded')!.position).toEqual({ x: 250, y: 250 })
+    expect(out.find((x) => x.id === 'sib')!.position.x).not.toBe(250)
+  })
+})
+
 describe('gapShift (horizontal / LR)', () => {
   const nodes = [
     n('box', 0, 0),

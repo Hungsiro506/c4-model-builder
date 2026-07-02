@@ -22,7 +22,7 @@ export const createViewSlice: StateCreator<
   [['zustand/immer', never]],
   [],
   ViewSlice
-> = (set) => ({
+> = (set, get) => ({
   layoutVersion: 0,
 
   addView: (type, scopeId, title) => {
@@ -122,20 +122,29 @@ export const createViewSlice: StateCreator<
     return newKey
   },
 
-  updateNodePosition: (nodeId, x, y) => set((s) => {
-    if (!s.workspace || !s.activeViewKey) return
-    for (const key of VIEW_ARRAY_KEYS) {
-      const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
-      if (!view) continue
-      const el = view.elements.find(e => e.id === nodeId)
-      if (!el) return
-      el.x = x
-      el.y = y
-      el.pinned = true
-      return
-    }
-    // Don't push undo for every drag position — too noisy
-  }),
+  updateNodePosition: (nodeId, x, y) => {
+    // Drag-stop persists the LIVE position. While an expansion is active that
+    // position already includes the expansion's gap-shift, so record which
+    // expansions are baked in — the layout pipeline skips their shift for this
+    // node instead of applying it twice. Read via get() (not the draft) to
+    // avoid immer proxy overhead on fields this update doesn't write.
+    const expandedIds = get().expandedElementIds
+    set((s) => {
+      if (!s.workspace || !s.activeViewKey) return
+      for (const key of VIEW_ARRAY_KEYS) {
+        const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
+        if (!view) continue
+        const el = view.elements.find(e => e.id === nodeId)
+        if (!el) return
+        el.x = x
+        el.y = y
+        el.pinned = true
+        el.shiftExempt = expandedIds.length > 0 ? [...expandedIds] : undefined
+        return
+      }
+      // Don't push undo for every drag position — too noisy
+    })
+  },
 
   updateExpandedChildPosition: (nodeId, x, y) => set((s) => {
     if (!s.workspace || !s.activeViewKey) return
@@ -155,22 +164,27 @@ export const createViewSlice: StateCreator<
     }
   }),
 
-  updateNodePositions: (updates) => set((s) => {
-    if (!s.workspace || !s.activeViewKey) return
-    const updateMap = new Map(updates.map(u => [u.id, u]))
-    for (const key of VIEW_ARRAY_KEYS) {
-      const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
-      if (!view) continue
-      for (const el of view.elements) {
-        const u = updateMap.get(el.id)
-        if (!u) continue
-        el.x = u.x
-        el.y = u.y
-        el.pinned = true
+  updateNodePositions: (updates) => {
+    // Same live-position semantics as updateNodePosition (see comment there).
+    const expandedIds = get().expandedElementIds
+    set((s) => {
+      if (!s.workspace || !s.activeViewKey) return
+      const updateMap = new Map(updates.map(u => [u.id, u]))
+      for (const key of VIEW_ARRAY_KEYS) {
+        const view = s.workspace.views[key].find(v => v.key === s.activeViewKey)
+        if (!view) continue
+        for (const el of view.elements) {
+          const u = updateMap.get(el.id)
+          if (!u) continue
+          el.x = u.x
+          el.y = u.y
+          el.pinned = true
+          el.shiftExempt = expandedIds.length > 0 ? [...expandedIds] : undefined
+        }
+        return
       }
-      return
-    }
-  }),
+    })
+  },
 
   syncAutoLayoutPositions: (viewKey, updates) => set((s) => {
     if (!s.workspace || updates.size === 0) return
@@ -259,6 +273,7 @@ export const createViewSlice: StateCreator<
       el.x = undefined
       el.y = undefined
       el.pinned = undefined
+      el.shiftExempt = undefined
     }
     s.layoutVersion += 1
   }),
@@ -272,6 +287,7 @@ export const createViewSlice: StateCreator<
       el.x = undefined
       el.y = undefined
       el.pinned = undefined
+      el.shiftExempt = undefined
     }
     if (direction) {
       view.autoLayout = { ...view.autoLayout, direction }

@@ -26,12 +26,15 @@ export function axisForDirection(direction: string): ShiftAxis {
 }
 
 /** Shift nodes positioned after `expandedId` along `axis` by `delta`.
- *  Pure: returns a new array; unmoved nodes are returned by reference. */
+ *  Pure: returns a new array; unmoved nodes are returned by reference.
+ *  `exemptIds` are nodes whose saved position already includes this box's
+ *  shift (dragged while it was expanded) — moving them again would double-shift. */
 export function gapShift<T extends LayoutNode>(
   nodes: T[],
   expandedId: string,
   delta: number,
   axis: ShiftAxis,
+  exemptIds?: ReadonlySet<string>,
 ): T[] {
   if (delta <= 0) return nodes
   const box = nodes.find((n) => n.id === expandedId)
@@ -43,6 +46,7 @@ export function gapShift<T extends LayoutNode>(
 
   return nodes.map((node) => {
     if (node.id === expandedId) return node
+    if (exemptIds?.has(node.id)) return node
     const leadingEdge = axis === 'x' ? node.position.x : node.position.y
     if (leadingEdge < boxTrailingEdge) return node
     return {
@@ -72,12 +76,13 @@ export function gapShiftCross<T extends LayoutNode>(
   grownWidth: number,
   grownHeight: number,
   primaryAxis: ShiftAxis,
+  exemptIds?: ReadonlySet<string>,
 ): T[] {
   const box = nodes.find((n) => n.id === expandedId)
   if (!box) return nodes
   // Grown rect anchored at the box's fixed leading corner.
   const rect = { x: box.position.x, y: box.position.y, w: grownWidth, h: grownHeight }
-  return gapShiftCrossRect(nodes, rect, primaryAxis, new Set([expandedId]))
+  return gapShiftCrossRect(nodes, rect, primaryAxis, new Set([expandedId, ...(exemptIds ?? [])]))
 }
 
 export type Rect = { x: number; y: number; w: number; h: number }
@@ -140,11 +145,17 @@ export function gapShiftCrossRect<T extends LayoutNode>(
 
 /** Apply several gap-shifts in sequence (one per expanded box). Order-independent
  *  because each shift only moves nodes strictly after a box; later boxes that were
- *  themselves shifted use their already-updated coordinates. */
+ *  themselves shifted use their already-updated coordinates.
+ *  `exempt` maps an expanded box id → node ids that must not move for that box
+ *  (their saved positions already include its shift). */
 export function gapShiftMany<T extends LayoutNode>(
   nodes: T[],
   shifts: Array<{ expandedId: string; delta: number }>,
   axis: ShiftAxis,
+  exempt?: ReadonlyMap<string, ReadonlySet<string>>,
 ): T[] {
-  return shifts.reduce((acc, { expandedId, delta }) => gapShift(acc, expandedId, delta, axis), nodes)
+  return shifts.reduce(
+    (acc, { expandedId, delta }) => gapShift(acc, expandedId, delta, axis, exempt?.get(expandedId)),
+    nodes,
+  )
 }

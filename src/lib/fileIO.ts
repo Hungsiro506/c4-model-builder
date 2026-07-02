@@ -333,6 +333,8 @@ function isViewElementShape(value: unknown): boolean {
   if ('x' in value && value.x !== undefined && !isFiniteNumber(value.x)) return false
   if ('y' in value && value.y !== undefined && !isFiniteNumber(value.y)) return false
   if ('pinned' in value && value.pinned !== undefined && typeof value.pinned !== 'boolean') return false
+  if ('shiftExempt' in value && value.shiftExempt !== undefined
+    && !(Array.isArray(value.shiftExempt) && value.shiftExempt.every((id) => typeof id === 'string'))) return false
   return true
 }
 
