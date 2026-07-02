@@ -36,6 +36,39 @@ describe('gapShift (vertical / TB)', () => {
   })
 })
 
+describe('gapShift — cross-axis scoping (only nodes the grown box actually needs room from)', () => {
+  // Box at (0,0) 200×100, growing to 800×600 (TB → axis y, cross = x, grown
+  // cross span 0..800). A node BELOW but far LEFT of the grown span must not
+  // move — the reported bug: a person placed left of a system rocketed
+  // downward when the system expanded, dragging its edge to the box bottom.
+  const nodes = [
+    n('box', 0, 0),
+    n('belowOverlapping', 100, 200),   // below, inside grown x-span → needs room
+    n('belowFarLeft', -700, 200),      // below, 700px left of the box → does not
+  ]
+
+  it('does not shift a below-the-box node with no cross-axis overlap', () => {
+    const out = gapShift(nodes, 'box', 500, 'y', undefined, 800)
+    expect(out.find((x) => x.id === 'belowFarLeft')!.position.y).toBe(200)
+  })
+
+  it('still shifts a below-the-box node inside the grown cross span', () => {
+    const out = gapShift(nodes, 'box', 500, 'y', undefined, 800)
+    expect(out.find((x) => x.id === 'belowOverlapping')!.position.y).toBe(700)
+  })
+
+  it('keeps blanket behavior when no cross size is given (back-compat)', () => {
+    const out = gapShift(nodes, 'box', 500, 'y')
+    expect(out.find((x) => x.id === 'belowFarLeft')!.position.y).toBe(700)
+  })
+
+  it('gapShiftMany threads the grown cross size per box', () => {
+    const out = gapShiftMany(nodes, [{ expandedId: 'box', delta: 500, grownCrossSize: 800 }], 'y')
+    expect(out.find((x) => x.id === 'belowFarLeft')!.position.y).toBe(200)
+    expect(out.find((x) => x.id === 'belowOverlapping')!.position.y).toBe(700)
+  })
+})
+
 describe('gapShift — shift exemption (position saved while expanded)', () => {
   const nodes = [
     n('box', 0, 0),

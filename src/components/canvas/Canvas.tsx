@@ -530,7 +530,14 @@ export default function Canvas() {
       // plus EXPAND_MARGIN so the next rank isn't flush against the grown box.
       const primaryShifts = growth.map((g) => {
         const grow = axis === 'x' ? Math.max(0, g.width - 200) : Math.max(0, g.height - 100)
-        return { expandedId: g.expandedId, delta: grow > 0 ? grow + EXPAND_MARGIN : 0 }
+        return {
+          expandedId: g.expandedId,
+          delta: grow > 0 ? grow + EXPAND_MARGIN : 0,
+          // Scope the flow-axis shift to nodes overlapping the grown box on the
+          // cross axis — a sibling far beside the box needs no room and must
+          // not be thrown down/across the canvas.
+          grownCrossSize: axis === 'x' ? g.height : g.width,
+        }
       })
       const layoutNodesForShift = laidOut.map((n) => ({
         id: n.id,

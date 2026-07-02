@@ -28,13 +28,20 @@ export function axisForDirection(direction: string): ShiftAxis {
 /** Shift nodes positioned after `expandedId` along `axis` by `delta`.
  *  Pure: returns a new array; unmoved nodes are returned by reference.
  *  `exemptIds` are nodes whose saved position already includes this box's
- *  shift (dragged while it was expanded) — moving them again would double-shift. */
+ *  shift (dragged while it was expanded) — moving them again would double-shift.
+ *  `grownCrossSize` scopes the shift on the cross axis: only nodes whose
+ *  cross-extent overlaps the grown box's span (from its fixed leading corner,
+ *  padded by EXPAND_MARGIN) actually need the room. Without it every node past
+ *  the box moves — which threw far-away siblings (e.g. a person 700px to the
+ *  left of an expanding system) across the canvas. Omit for legacy blanket
+ *  behavior. */
 export function gapShift<T extends LayoutNode>(
   nodes: T[],
   expandedId: string,
   delta: number,
   axis: ShiftAxis,
   exemptIds?: ReadonlySet<string>,
+  grownCrossSize?: number,
 ): T[] {
   if (delta <= 0) return nodes
   const box = nodes.find((n) => n.id === expandedId)
@@ -43,12 +50,21 @@ export function gapShift<T extends LayoutNode>(
   const boxTrailingEdge = axis === 'x'
     ? box.position.x + box.width
     : box.position.y + box.height
+  // Grown cross span, anchored at the box's fixed leading corner.
+  const crossLead = axis === 'x' ? box.position.y : box.position.x
 
   return nodes.map((node) => {
     if (node.id === expandedId) return node
     if (exemptIds?.has(node.id)) return node
     const leadingEdge = axis === 'x' ? node.position.x : node.position.y
     if (leadingEdge < boxTrailingEdge) return node
+    if (grownCrossSize !== undefined) {
+      const crossStart = axis === 'x' ? node.position.y : node.position.x
+      const crossEnd = crossStart + (axis === 'x' ? node.height : node.width)
+      const overlaps = crossStart < crossLead + grownCrossSize + EXPAND_MARGIN
+        && crossEnd > crossLead - EXPAND_MARGIN
+      if (!overlaps) return node
+    }
     return {
       ...node,
       position: axis === 'x'
@@ -147,15 +163,17 @@ export function gapShiftCrossRect<T extends LayoutNode>(
  *  because each shift only moves nodes strictly after a box; later boxes that were
  *  themselves shifted use their already-updated coordinates.
  *  `exempt` maps an expanded box id → node ids that must not move for that box
- *  (their saved positions already include its shift). */
+ *  (their saved positions already include its shift). Each shift may carry the
+ *  box's grown cross-axis size to scope the shift to nodes that overlap it. */
 export function gapShiftMany<T extends LayoutNode>(
   nodes: T[],
-  shifts: Array<{ expandedId: string; delta: number }>,
+  shifts: Array<{ expandedId: string; delta: number; grownCrossSize?: number }>,
   axis: ShiftAxis,
   exempt?: ReadonlyMap<string, ReadonlySet<string>>,
 ): T[] {
   return shifts.reduce(
-    (acc, { expandedId, delta }) => gapShift(acc, expandedId, delta, axis, exempt?.get(expandedId)),
+    (acc, { expandedId, delta, grownCrossSize }) =>
+      gapShift(acc, expandedId, delta, axis, exempt?.get(expandedId), grownCrossSize),
     nodes,
   )
 }
